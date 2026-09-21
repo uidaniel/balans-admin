@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+build/
+
+# Secrets. .env.example is the committed template.
+.env*
+!.env.example
+
+.DS_Store
+*.log
+next-env.d.ts

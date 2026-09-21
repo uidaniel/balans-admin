@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+/* Balans brand tokens (brand/balans-geist/BRAND.md). */
+@theme {
+  --color-marigold: #f5b82e;
+  --color-marigold-deep: #d99a12;
+  --color-ink: #10231c;
+  --color-ink-2: #173128;
+  --color-ink-3: #1f3d32;
+  --color-cream: #f6f1e7;
+  --color-sand: #e9e1d0;
+  --color-sand-2: #ddd3bf;
+  --color-moss: #3f8f5f;
+  --color-clay: #c2462e;
+
+  --font-display: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
+
+  --tracking-tightest: -0.045em;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-marigold);
+  color: var(--color-ink);
+}
+
+@layer components {
+  .label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .container-x {
+    width: 100%;
+    max-width: 1200px;
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+  @media (min-width: 640px) {
+    .container-x {
+      padding-inline: 2rem;
+    }
+  }
+
+  /* Torn till-roll edge for receipts. */
+  .torn-bottom {
+    --tooth: 14px;
+    mask:
+      conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / var(--tooth) 100%;
+    padding-bottom: calc(var(--tooth) + 1.5rem);
+  }
+
+  .dotted-leader {
+    flex: 1;
+    min-width: 1rem;
+    border-bottom: 1.5px dotted currentColor;
+    opacity: 0.3;
+    transform: translateY(-0.3em);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-rise {
+  animation: rise 0.5s cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+}
