@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { userClient } from "@/lib/supabase-server";
 
 /**
@@ -12,12 +11,12 @@ import { userClient } from "@/lib/supabase-server";
  *
  * A link generated server-side, with the admin API, carries `?token_hash=`
  * and a `type` instead. There is no verifier for those, so they are verified
- * directly. This is the path that matters when the email service is down or
- * rate-limited and somebody with database access has to hand over a working
- * link — which is exactly when being locked out costs the most.
+ * directly. That path matters precisely when the ordinary one is unavailable
+ * — Supabase's built-in email sender is fixed at two messages an hour — and
+ * being locked out of the back office is when it costs most.
  *
- * Either way a session cookie is set here, server-side, and nothing sensitive
- * travels in a URL fragment where the server could never see it.
+ * Either way the session cookie is set here, server-side, rather than
+ * arriving in a URL fragment the server could never read.
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -26,9 +25,7 @@ export async function GET(req: Request) {
   const type = url.searchParams.get("type") ?? "magiclink";
   const next = url.searchParams.get("next") ?? "/";
 
-  if (!code && !tokenHash) {
-    return NextResponse.redirect(new URL("/login?error=missing_code", url.origin));
-  }
+  if (!code && !tokenHash) return back("/login?error=missing_code");
 
   const supabase = await userClient();
 
@@ -40,11 +37,33 @@ export async function GET(req: Request) {
       });
 
   if (error) {
-    // The message is not shown to the visitor: an expired link and a link for
-    // somebody else should look the same from outside.
+    // Not shown to the visitor: an expired link and somebody else's link
+    // should look identical from outside.
     console.error("[admin] sign-in failed", error.message);
-    return NextResponse.redirect(new URL("/login?error=expired", url.origin));
+    return back("/login?error=expired");
   }
 
-  return NextResponse.redirect(new URL(next, url.origin));
+  // Only a path is ever allowed through, so `?next=https://elsewhere` cannot
+  // turn a sign-in link into an open redirect.
+  return back(next.startsWith("/") && !next.startsWith("//") ? next : "/");
+}
+
+/**
+ * Redirects to a path, never to an origin.
+ *
+ * Netlify serves this site on two hostnames — `admin-balans.netlify.app` and
+ * the branch's `main--admin-balans.netlify.app` — and inside the function the
+ * request's own origin is the branch one whichever the browser used. Building
+ * an absolute redirect from it therefore moved people across hostnames
+ * mid-sign-in, and the session cookie, set for the host the browser actually
+ * asked, was not sent to the other. The result was a loop: sign in, get
+ * bounced to the branch host, appear signed out, land back on the login page.
+ *
+ * A relative Location is resolved by the browser against the URL it used, so
+ * nobody moves hosts and the cookie keeps working. It is also the only form
+ * that stays correct on a custom domain, a deploy preview and localhost
+ * without any of them being configured anywhere.
+ */
+function back(path: string): Response {
+  return new Response(null, { status: 303, headers: { location: path } });
 }
