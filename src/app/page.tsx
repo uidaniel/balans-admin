@@ -39,9 +39,10 @@ export default async function AdminHome() {
         </p>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="On the list" value={counts.total} />
         <Stat label="Joined today" value={counts.today} />
+        <Stat label="Told us more" value={counts.answered} />
         <Stat label="Invited" value={counts.invited} />
       </div>
 
@@ -73,15 +74,19 @@ async function loadWaitlist() {
     Date.UTC(lagos.getUTCFullYear(), lagos.getUTCMonth(), lagos.getUTCDate()) - LAGOS_OFFSET_MS,
   ).toISOString();
 
-  const [list, total, today, invited] = await Promise.all([
+  const [list, total, today, invited, answered] = await Promise.all([
     sb
       .from("waitlist")
-      .select("id, email, work, source, ref, invited_at, created_at")
+      .select("id, phone, email, work, cadence, source, ref, via, details_at, invited_at, created_at")
       .order("created_at", { ascending: false })
       .limit(1000),
     sb.from("waitlist").select("*", { count: "exact", head: true }),
     sb.from("waitlist").select("*", { count: "exact", head: true }).gte("created_at", startOfDay),
     sb.from("waitlist").select("*", { count: "exact", head: true }).not("invited_at", "is", null),
+    // Step two of the form is optional, so this is the number of people who
+    // told us what they bill for and how often. That is the pool the first
+    // twenty get picked from, and it is a different figure from the total.
+    sb.from("waitlist").select("*", { count: "exact", head: true }).not("details_at", "is", null),
   ]);
 
   return {
@@ -90,6 +95,7 @@ async function loadWaitlist() {
       total: total.count ?? 0,
       today: today.count ?? 0,
       invited: invited.count ?? 0,
+      answered: answered.count ?? 0,
     },
     error: list.error,
   };

@@ -10,12 +10,26 @@ export async function GET() {
 
   const { data, error } = await serviceClient()
     .from("waitlist")
-    .select("email, work, source, ref, invited_at, created_at")
+    .select("phone, email, work, cadence, source, ref, via, code, details_at, invited_at, created_at")
     .order("created_at", { ascending: false });
 
   if (error) return new Response(`Could not read the waitlist: ${error.message}`, { status: 500 });
 
-  const head = ["email", "work", "source", "ref", "invited_at", "created_at"];
+  // Phone first: this file is what the launch broadcast gets built from, and
+  // the message goes out on WhatsApp.
+  const head = [
+    "phone",
+    "email",
+    "work",
+    "cadence",
+    "source",
+    "ref",
+    "via",
+    "code",
+    "details_at",
+    "invited_at",
+    "created_at",
+  ];
   const lines = [head.join(",")];
   for (const r of data ?? []) {
     lines.push(head.map((k) => csv((r as Record<string, unknown>)[k])).join(","));
