@@ -1,0 +1,35 @@
+# Netlify build settings for the back office.
+#
+# Deployed separately from the marketing site (github.com/pysavantcodes/balans)
+# and the API (github.com/uidaniel/balans-api). Three repositories, three
+# deployments: this one reads every user's money and belongs behind its own
+# door.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  # Match local. Next 16 needs 18.18+.
+  NODE_VERSION = "22"
+
+  # Turbopack's build cache (on by default since Next 16.3) records the values
+  # of env vars read during the build, the Supabase service-role key among
+  # them, so it can tell when a rebuild is needed. Netlify keeps that cache
+  # between builds but never publishes it, and the secrets scan still covers
+  # everything that is published: the static output and the server functions.
+  # Only the cache is left out.
+  SECRETS_SCAN_OMIT_PATHS = ".netlify/.next/cache/**"
+
+# The Next.js runtime is detected and installed automatically; pinning it is
+# discouraged by Netlify because you stop receiving adapter fixes.
+
+# Nothing here should ever appear in a search result. The pages already send
+# `robots: noindex` from the layout, but a header covers the routes that
+# return CSV and JSON rather than HTML, where metadata does not reach.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+    Referrer-Policy = "no-referrer"
+    X-Content-Type-Options = "nosniff"

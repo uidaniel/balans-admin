@@ -7,6 +7,8 @@ Split out of the marketing site so it can be deployed, secured and restricted
 on its own. It reads the same Supabase project as the API — the same tables,
 not a copy — so nothing here needs the API to be running.
 
+Deployed at **https://admin-balans.netlify.app**.
+
 ## Running it
 
     cp .env.example .env.local   # then fill in the three values
@@ -44,7 +46,7 @@ Redirect URLs**, every origin this app is served from needs its callback
 listed:
 
     http://localhost:3100/auth/callback
-    https://admin.balans.ng/auth/callback     # or wherever it is deployed
+    https://admin-balans.netlify.app/auth/callback
 
 This moved when the admin was split out of the marketing site — it used to be
 `/admin/auth/callback` on port 3000 — so an old allowlist will send links to
@@ -56,3 +58,23 @@ They come from the `admin_metrics` view, which lives in the API's migrations
 (`0012_admin_metrics.sql`). Definitions belong there so this page and anything
 else asking the same question cannot disagree. If the panel says there are no
 metrics yet, that migration has not run against this database.
+
+## Deploying
+
+Netlify, from this repository. `netlify.toml` carries the build settings; the
+Next.js runtime is detected automatically.
+
+Three environment variables have to be set in the Netlify site settings —
+without the third the waitlist and the metrics come back empty rather than
+failing, and the dashboard says so in a banner:
+
+    NEXT_PUBLIC_SUPABASE_URL
+    NEXT_PUBLIC_SUPABASE_ANON_KEY
+    SUPABASE_SERVICE_ROLE_KEY
+
+The service-role key reads past row-level security. It is a server secret: it
+must be set as an ordinary environment variable, never with a `NEXT_PUBLIC_`
+prefix, or Next.js will inline it into the browser bundle.
+
+Deploy previews get their own URLs, which are not on the Supabase redirect
+allowlist, so sign-in only works on the production URL unless you add them.
