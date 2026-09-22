@@ -10,3 +10,6 @@ build/
 .DS_Store
 *.log
 next-env.d.ts
+
+# Build artefact, regenerated on every typecheck.
+*.tsbuildinfo

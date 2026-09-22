@@ -89,14 +89,14 @@ export function MetricsPanel({ m }: { m: Metrics | null }) {
         <Metric
           label="Active users"
           value={`${m.users_active} of ${m.users_total}`}
-          hint="Roughly 65 active users covers the monthly running costs."
+          hint="About 31 active users covers a lean setup; 137 if the monthly bill reaches ₦80,000."
         />
         <Metric
           label="Pro conversion"
           value={conversion === null ? "—" : `${conversion}%`}
-          target=">15%"
-          ok={conversion === null ? null : conversion >= 15}
-          hint={`${m.pro_active} paying. Below 10% you need far more users for the same money.`}
+          target=">10%"
+          ok={conversion === null ? null : conversion >= 10}
+          hint={`${m.pro_active} paying. Plan on 8–10%; 15% is a stretch. Below 10% you need far more users for the same money.`}
         />
         <Metric
           label="Invoices per Pro user"
@@ -110,14 +110,14 @@ export function MetricsPanel({ m }: { m: Metrics | null }) {
           value={paymentRate === null ? "—" : `${paymentRate}%`}
           target=">70%"
           ok={paymentRate === null ? null : paymentRate >= 70}
-          hint={`${m.documents_paid_30d} paid of ${m.documents_30d} sent. An unpaid invoice costs messages and earns nothing.`}
+          hint={`${m.documents_paid_30d} paid of ${m.documents_30d} sent. A Free user costs ₦154 a month whatever the rate, so on small invoices they go negative below about 51%.`}
         />
         <Metric
           label="Average invoice"
           value={avgInvoice === null ? "—" : naira(Math.round(avgInvoice * 100))}
           target=">₦20,000"
           ok={avgInvoice === null ? null : avgInvoice >= 20_000}
-          hint="Below about ₦11,000 a Free user costs more in messages than they earn."
+          hint="Free-tier value scales almost linearly with this. It is no longer where the risk sits — watch the payment rate instead."
         />
         <Metric
           label="Pro cancellations"
