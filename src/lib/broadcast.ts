@@ -11,7 +11,7 @@ import type { Loaded } from "@/lib/dashboard";
  * the same way, as `template_status`, because only the API holds a Meta key.
  */
 
-export const CAMPAIGN = "launch_live";
+export const CAMPAIGN = "launch_setup";
 
 /** Where a test goes unless somebody types another number. */
 export const DEFAULT_TEST_PHONE = "08107408438";
@@ -19,7 +19,7 @@ export const DEFAULT_TEST_PHONE = "08107408438";
 export type Campaign = {
   campaign: string;
   image: string;
-  whatsapp: { body: string; footer: string; button: string; link: string };
+  whatsapp: { body: string; footer: string; button: string; opens: string };
   email: { subject: string; html: string };
 };
 

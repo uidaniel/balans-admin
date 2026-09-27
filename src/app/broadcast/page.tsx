@@ -282,19 +282,12 @@ function WhatsAppPreview({ c }: { c: NonNullable<Awaited<ReturnType<typeof loadB
             <p className="text-[0.78rem] text-[#667781]">{c.whatsapp.footer}</p>
             <p className="shrink-0 text-[0.68rem] text-[#667781]">{lagosTime()}</p>
           </div>
-          <a
-            href={c.whatsapp.link}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center justify-center gap-1.5 border-t border-[#e9edef] py-2.5 text-[0.9rem] font-medium text-[#0a7cff]"
-          >
-            <Icon name="globe" className="size-4" />
+          <p className="flex items-center justify-center gap-1.5 border-t border-[#e9edef] py-2.5 text-[0.9rem] font-medium text-[#0a7cff]">
+            <Icon name="file" className="size-4" />
             {c.whatsapp.button}
-          </a>
+          </p>
         </div>
-        <p className="mt-3 truncate text-xs text-ink/45">
-          Button opens <span className="font-mono">{c.whatsapp.link}</span>
-        </p>
+        <p className="mt-3 text-xs text-ink/45">Button opens: {c.whatsapp.opens}</p>
       </div>
       <p className="mt-2 text-xs text-ink/45">Template: {CAMPAIGN}</p>
     </div>
