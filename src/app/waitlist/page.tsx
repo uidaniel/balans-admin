@@ -2,6 +2,8 @@ import { serviceClient } from "@/lib/supabase";
 import { storageMode } from "@/lib/waitlist";
 import { WaitlistTable, type Row } from "../waitlist-table";
 import { Failed, gate, Shell } from "../shell";
+import { Stat } from "@/components/ui";
+import { Icon } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 
@@ -20,14 +22,15 @@ export default async function WaitlistPage() {
       actions={
         <a
           href="/export"
-          className="inline-flex h-10 items-center rounded-full bg-white px-4 text-sm font-semibold ring-1 ring-ink/15 transition-colors ring-inset hover:ring-ink/40"
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-ink px-4 text-sm font-medium text-cream transition-colors hover:bg-ink-3"
         >
+          <Icon name="download" className="size-4 text-marigold" />
           Export CSV
         </a>
       }
     >
       {storageMode() === "file" && (
-        <p className="mb-6 rounded-2xl bg-marigold/25 px-5 py-4 text-[0.95rem] leading-relaxed">
+        <p className="mb-6 rounded-2xl border border-marigold/40 bg-marigold/10 px-5 py-4 text-sm leading-relaxed">
           <strong className="font-semibold">Signups are going to a local file.</strong> SUPABASE_SERVICE_ROLE_KEY is
           not set on this deployment, so the form is writing to
           <code className="mx-1 rounded bg-ink/10 px-1.5 py-0.5 text-[0.85em]">.waitlist.jsonl</code>
@@ -39,13 +42,24 @@ export default async function WaitlistPage() {
         <Failed what="the waitlist" error={error.message} />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="On the list" value={counts.total} />
-            <Stat label="Joined today" value={counts.today} />
-            <Stat label="Told us more" value={counts.answered} />
-            <Stat label="Invited" value={counts.invited} />
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Stat icon="users" label="On the list" value={counts.total.toLocaleString("en-NG")} />
+            <Stat icon="userPlus" label="Joined today" value={counts.today.toLocaleString("en-NG")} note="Since midnight, Lagos" />
+            <Stat
+              icon="message"
+              label="Told us more"
+              value={counts.answered.toLocaleString("en-NG")}
+              note={counts.total ? `${Math.round((100 * counts.answered) / counts.total)}% answered step two` : undefined}
+            />
+            <Stat
+              icon="send"
+              label="Invited"
+              value={counts.invited.toLocaleString("en-NG")}
+              note={counts.total ? `${Math.round((100 * counts.invited) / counts.total)}% of the list` : undefined}
+              tone="moss"
+            />
           </div>
-          <div className="mt-6">
+          <div className="mt-4">
             <WaitlistTable rows={rows} />
           </div>
         </>
@@ -93,13 +107,4 @@ async function loadWaitlist() {
     },
     error: list.error,
   };
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-[20px] bg-white px-5 py-4 ring-1 ring-ink/8 ring-inset">
-      <p className="label text-ink/40">{label}</p>
-      <p className="mt-1 font-display text-3xl font-extrabold tabular-nums">{value}</p>
-    </div>
-  );
 }

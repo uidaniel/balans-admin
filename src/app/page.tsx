@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { serviceClient } from "@/lib/supabase";
 import { naira, shortDate } from "@/lib/money";
 import {
@@ -7,22 +6,24 @@ import {
   loadInsights,
   loadOverview,
   loadPayments,
+  type Account,
   type Day,
   type Insights,
   type Overview,
+  type Payment,
 } from "@/lib/dashboard";
 import {
-  AreaChart,
-  Delta,
+  ColumnChart,
   Donut,
   DualBars,
   Funnel,
   Gauge,
   HourStrip,
+  MiniBars,
   RankedBars,
-  Sparkline,
   weekChange,
 } from "@/components/charts";
+import { Avatar, Card, Empty, Kpi, MoreLink, Pill, SectionTitle, Stat, table } from "@/components/ui";
 import { MetricsPanel, type Metrics } from "./metrics";
 import { Failed, gate, Shell } from "./shell";
 
@@ -58,63 +59,79 @@ export default async function OverviewPage() {
    */
   const onPro = top.data ? top.data.filter((a) => a.plan === "pro").length : null;
 
-  const now = new Intl.DateTimeFormat("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Africa/Lagos",
-  }).format(new Date());
-
   return (
-    <Shell email={g.staff.email} current="/" title="Overview" sub={`Live from the database · ${now} Lagos`}>
+    <Shell
+      email={g.staff.email}
+      current="/"
+      title="Overview"
+      sub="How it is going, where the money is, who is using it, and what needs a look."
+    >
       {overview.error || !daily.data ? (
         <Failed what="the overview" error={overview.error ?? daily.error ?? "unknown"} />
       ) : (
         <>
-          <Hero o={overview.data!} days={daily.data} onPro={onPro} />
+          <Headline o={overview.data!} days={daily.data} onPro={onPro} />
+          <div className="mt-4 grid gap-4 xl:grid-cols-3">
+            <Card
+              className="xl:col-span-2"
+              title="Collected per day"
+              sub="What clients paid through Balans, last 30 days"
+              icon="bars"
+              action={
+                <div className="text-right">
+                  <p className="font-display text-xl font-semibold tracking-tight tabular-nums">
+                    {naira(overview.data!.collected_30d_kobo)}
+                  </p>
+                  <p className="text-xs text-ink/45">{naira(overview.data!.collected_24h_kobo)} in 24 hours</p>
+                </div>
+              }
+            >
+              <ColumnChart
+                points={daily.data.map((d) => ({ label: dayMonth(d.day), value: d.collected_kobo }))}
+                format={(v) => compactNaira(v)}
+              />
+            </Card>
+            <InvoicesPaid o={overview.data!} />
+          </div>
           <RightNow o={overview.data!} />
-          <MoneySection o={overview.data!} days={daily.data} i={insights.data} />
+          <MoneySection o={overview.data!} i={insights.data} />
           <GrowthSection o={overview.data!} days={daily.data} i={insights.data} onPro={onPro} />
-          {insights.data ? <UsageSection o={overview.data!} i={insights.data} /> : <Failed what="insights" error={insights.error ?? ""} />}
+          {insights.data ? (
+            <UsageSection o={overview.data!} i={insights.data} />
+          ) : (
+            <div className="mt-10">
+              <Failed what="insights" error={insights.error ?? ""} />
+            </div>
+          )}
         </>
       )}
 
-      <div className="mt-8 grid gap-4 lg:grid-cols-2">
-        <Panel title="Top users" action={<More href="/users">All users</More>}>
+      <SectionTitle title="People and payments" sub="Who bills the most, and the money that came in last." />
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card title="Top users" sub="By amount invoiced" icon="users" flush action={<MoreLink href="/users">All users</MoreLink>}>
           {top.data ? (
-            <List
-              rows={top.data.slice(0, 7).map((a, idx) => ({
-                key: a.id,
-                rank: idx + 1,
-                left: a.business_name ?? `+${a.wa_phone}`,
-                sub: `${a.invoices} invoice${a.invoices === 1 ? "" : "s"} · ${a.plan === "pro" ? "Pro" : "Free"}`,
-                right: naira(a.invoiced_kobo),
-                rightSub: `${naira(a.collected_kobo)} paid`,
-              }))}
-              empty="Nobody has sent an invoice yet."
-            />
+            <TopUsers rows={top.data.slice(0, 7)} />
           ) : (
-            <Failed what="users" error={top.error} />
+            <div className="p-5">
+              <Failed what="users" error={top.error} />
+            </div>
           )}
-        </Panel>
-        <Panel title="Latest payments" action={<More href="/payments">All payments</More>}>
+        </Card>
+        <Card
+          title="Latest payments"
+          sub="Successful, newest first"
+          icon="receipt"
+          flush
+          action={<MoreLink href="/payments">All payments</MoreLink>}
+        >
           {recent.data ? (
-            <List
-              rows={recent.data.slice(0, 7).map((p) => ({
-                key: p.id,
-                left: p.business_name ?? "—",
-                sub: `${p.client_name ?? "—"} · ${p.provider === "paystack" ? "Card" : "Transfer"} · ${shortDate(p.at)}`,
-                right: naira(p.client_total_kobo),
-                rightSub: p.document_ref ?? "",
-              }))}
-              empty="No payments yet."
-            />
+            <LatestPayments rows={recent.data.slice(0, 7)} />
           ) : (
-            <Failed what="payments" error={recent.error} />
+            <div className="p-5">
+              <Failed what="payments" error={recent.error} />
+            </div>
           )}
-        </Panel>
+        </Card>
       </div>
 
       <MetricsPanel m={health} />
@@ -123,63 +140,65 @@ export default async function OverviewPage() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Hero                                                                       */
+/* Headline                                                                   */
 /* -------------------------------------------------------------------------- */
 
-function Hero({ o, days, onPro }: { o: Overview; days: Day[]; onPro: number | null }) {
+function Headline({ o, days, onPro }: { o: Overview; days: Day[]; onPro: number | null }) {
   const collected = days.map((d) => d.collected_kobo);
   const signups = days.map((d) => d.signups);
   const docs = days.map((d) => d.documents);
 
-  const tiles = [
-    {
-      label: "MRR",
-      value: naira(o.mrr_kobo),
-      note: `${o.pro_users} paying${onPro !== null && onPro !== o.pro_users ? ` · ${onPro} on Pro` : ""} · ${naira(o.mrr_kobo * 12)} a year`,
-      spark: null as number[] | null,
-      delta: undefined as number | null | undefined,
-    },
-    {
-      label: "Collected, 30 days",
-      value: naira(o.collected_30d_kobo),
-      note: `${naira(o.collected_kobo)} all time`,
-      spark: collected,
-      delta: weekChange(collected),
-    },
-    {
-      label: "Users",
-      value: o.users_total.toLocaleString("en-NG"),
-      note: `${o.signups_24h} joined in 24 hours`,
-      spark: signups,
-      delta: weekChange(signups),
-    },
-    {
-      label: "Documents, 30 days",
-      value: o.documents_30d.toLocaleString("en-NG"),
-      note: `${o.documents_total.toLocaleString("en-NG")} all time`,
-      spark: docs,
-      delta: weekChange(docs),
-    },
-  ];
-
   return (
-    <section className="relative overflow-hidden rounded-[28px] bg-ink p-6 text-cream sm:p-8">
-      <div aria-hidden className="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full bg-marigold/20 blur-3xl" />
-      <div aria-hidden className="pointer-events-none absolute -bottom-32 left-1/3 size-72 rounded-full bg-moss/25 blur-3xl" />
-      <div className="relative grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
-        {tiles.map((t) => (
-          <div key={t.label} className="min-w-0">
-            <p className="text-[0.7rem] font-semibold tracking-widest text-cream/55 uppercase">{t.label}</p>
-            <p className="mt-2 font-display text-[2.1rem] leading-none font-extrabold tracking-tight tabular-nums">{t.value}</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {t.delta !== undefined && <Delta pct={t.delta} dark />}
-              <span className="text-xs text-cream/50">{t.note}</span>
-            </div>
-            {t.spark && <Sparkline values={t.spark} className="mt-3 h-10 w-full text-marigold" />}
-          </div>
-        ))}
-      </div>
+    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <Kpi dark label="Monthly recurring revenue" icon="trending" value={naira(o.mrr_kobo)} note={`${naira(o.mrr_kobo * 12)} a year`}>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-cream/60">
+          <span className="rounded-md bg-cream/10 px-1.5 py-0.5 font-semibold text-cream">{o.pro_users} paying</span>
+          {onPro !== null && onPro !== o.pro_users && <span>{onPro} on Pro</span>}
+        </div>
+      </Kpi>
+      <Kpi
+        label="Collected, 30 days"
+        icon="wallet"
+        value={naira(o.collected_30d_kobo)}
+        note={`${naira(o.collected_kobo)} all time`}
+        delta={weekChange(collected)}
+      >
+        <MiniBars values={collected} />
+      </Kpi>
+      <Kpi
+        label="Users"
+        icon="users"
+        value={o.users_total.toLocaleString("en-NG")}
+        note={`${o.signups_24h} joined in the last 24 hours`}
+        delta={weekChange(signups)}
+      >
+        <MiniBars values={signups} />
+      </Kpi>
+      <Kpi
+        label="Documents, 30 days"
+        icon="file"
+        value={o.documents_30d.toLocaleString("en-NG")}
+        note={`${o.documents_total.toLocaleString("en-NG")} all time`}
+        delta={weekChange(docs)}
+      >
+        <MiniBars values={docs} />
+      </Kpi>
     </section>
+  );
+}
+
+function InvoicesPaid({ o }: { o: Overview }) {
+  const paymentRate =
+    o.invoices_paid + o.invoices_unpaid > 0 ? (100 * o.invoices_paid) / (o.invoices_paid + o.invoices_unpaid) : null;
+  return (
+    <Card title="Invoices paid" sub="Of every invoice sent" icon="check">
+      <Gauge pct={paymentRate} target={70} label="paid" />
+      <div className="mt-5 grid grid-cols-3 divide-x divide-line rounded-xl border border-line">
+        <Mini label="Paid" value={o.invoices_paid} tone="moss" />
+        <Mini label="Unpaid" value={o.invoices_unpaid} />
+        <Mini label="Overdue" value={o.invoices_overdue} tone={o.invoices_overdue ? "clay" : undefined} />
+      </div>
+    </Card>
   );
 }
 
@@ -189,30 +208,32 @@ function Hero({ o, days, onPro }: { o: Overview; days: Day[]; onPro: number | nu
 
 function RightNow({ o }: { o: Overview }) {
   const windows = [
-    { k: "6h", s: o.signups_6h, d: o.documents_6h },
-    { k: "12h", s: o.signups_12h, d: o.documents_12h },
-    { k: "24h", s: o.signups_24h, d: o.documents_24h },
+    { k: "6 hours", s: o.signups_6h, d: o.documents_6h },
+    { k: "12 hours", s: o.signups_12h, d: o.documents_12h },
+    { k: "24 hours", s: o.signups_24h, d: o.documents_24h },
     { k: "7 days", s: o.signups_7d, d: o.documents_7d },
     { k: "30 days", s: o.signups_30d, d: o.documents_30d },
   ];
   return (
-    <section className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-      {windows.map((w) => (
-        <div key={w.k} className="rounded-[20px] bg-white px-5 py-4 ring-1 ring-ink/10 ring-inset">
-          <p className="text-[0.7rem] font-semibold tracking-[0.08em] text-ink/45 uppercase">Last {w.k}</p>
-          <div className="mt-2 flex items-end justify-between gap-2">
-            <div>
-              <p className="font-display text-2xl font-extrabold tabular-nums">{w.s}</p>
-              <p className="text-xs text-ink/50">sign-ups</p>
-            </div>
-            <div className="text-right">
-              <p className="font-display text-2xl font-extrabold tabular-nums text-ink/70">{w.d}</p>
-              <p className="text-xs text-ink/50">documents</p>
+    <Card className="mt-4" title="Right now" sub="Sign-ups and documents, by window" icon="activity">
+      <div className="grid grid-cols-2 gap-y-5 sm:grid-cols-3 lg:grid-cols-5 lg:divide-x lg:divide-line">
+        {windows.map((w) => (
+          <div key={w.k} className="lg:px-5 lg:first:pl-0 lg:last:pr-0">
+            <p className="text-xs font-medium text-ink/45">Last {w.k}</p>
+            <div className="mt-2 flex items-baseline gap-5">
+              <div>
+                <p className="font-display text-2xl font-semibold tracking-tight tabular-nums">{w.s}</p>
+                <p className="text-xs text-ink/50">sign-ups</p>
+              </div>
+              <div>
+                <p className="font-display text-2xl font-semibold tracking-tight text-ink/45 tabular-nums">{w.d}</p>
+                <p className="text-xs text-ink/50">documents</p>
+              </div>
             </div>
           </div>
-        </div>
-      ))}
-    </section>
+        ))}
+      </div>
+    </Card>
   );
 }
 
@@ -220,49 +241,29 @@ function RightNow({ o }: { o: Overview }) {
 /* Money                                                                      */
 /* -------------------------------------------------------------------------- */
 
-function MoneySection({ o, days, i }: { o: Overview; days: Day[]; i: Insights | null }) {
-  const paymentRate =
-    o.invoices_paid + o.invoices_unpaid > 0 ? (100 * o.invoices_paid) / (o.invoices_paid + o.invoices_unpaid) : null;
+function MoneySection({ o, i }: { o: Overview; i: Insights | null }) {
   const contribution = o.earned_30d_kobo - o.message_cost_30d_kobo;
 
   return (
     <>
-      <Heading title="Money" sub="What clients paid, what is still owed, and what Balans keeps." />
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Panel
-          className="lg:col-span-2"
-          title="Collected per day"
-          action={<span className="font-display text-lg font-bold tabular-nums">{naira(o.collected_30d_kobo)}</span>}
-        >
-          <AreaChart
-            id="collected"
-            points={days.map((d) => ({ label: shortDate(d.day), value: d.collected_kobo }))}
-            format={(v) => compactNaira(v)}
-          />
-          <div className="mt-3 flex justify-between text-[0.68rem] text-ink/40">
-            <span>{shortDate(days[0]!.day)}</span>
-            <span>Today</span>
-          </div>
-        </Panel>
-        <Panel title="Invoices paid">
-          <Gauge pct={paymentRate} target={70} label="Of invoices sent" />
-          <div className="mt-5 grid grid-cols-3 gap-2 text-center">
-            <Mini label="Paid" value={o.invoices_paid} tone="moss" />
-            <Mini label="Unpaid" value={o.invoices_unpaid} />
-            <Mini label="Overdue" value={o.invoices_overdue} tone={o.invoices_overdue ? "clay" : undefined} />
-          </div>
-        </Panel>
-      </div>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Invoiced, all time" value={naira(o.invoiced_kobo)} note={`${naira(o.invoiced_30d_kobo)} in 30 days`} />
-        <Stat label="Unpaid by clients" value={naira(o.outstanding_kobo)} note={`${o.invoices_unpaid} invoices waiting`} tone={o.outstanding_kobo > 0 ? "clay" : undefined} />
+      <SectionTitle title="Money" sub="What clients paid, what is still owed, and what Balans keeps." />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat icon="file" label="Invoiced, all time" value={naira(o.invoiced_kobo)} note={`${naira(o.invoiced_30d_kobo)} in 30 days`} />
         <Stat
+          icon="alert"
+          label="Unpaid by clients"
+          value={naira(o.outstanding_kobo)}
+          note={`${o.invoices_unpaid} invoices waiting`}
+          tone={o.outstanding_kobo > 0 ? "clay" : undefined}
+        />
+        <Stat
+          icon="receipt"
           label="Average invoice"
           value={naira(i?.avg_invoice_kobo ?? 0)}
           note={i ? `Median ${naira(i.median_invoice_kobo)} · largest ${naira(i.largest_invoice_kobo)}` : undefined}
         />
         <Stat
+          icon="clock"
           label="Time to get paid"
           value={i?.median_hours_to_paid == null ? "—" : formatHours(i.median_hours_to_paid)}
           note="Median, from sent to paid"
@@ -270,18 +271,27 @@ function MoneySection({ o, days, i }: { o: Overview; days: Day[]; i: Insights | 
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <Panel title="What Balans earns">
-          <dl className="space-y-3 text-sm">
+        <Card title="What Balans earns" sub="Revenue, and the cost of sending it" icon="wallet">
+          <dl className="space-y-3.5 text-sm">
             <Row k="Subscriptions" v={naira(o.earned_subscriptions_kobo)} />
             <Row k="Transaction fees" v={naira(o.earned_fees_kobo)} />
             <Row k="Earned, 30 days" v={naira(o.earned_30d_kobo)} strong />
             <Row k="WhatsApp, 30 days" v={`−${naira(o.message_cost_30d_kobo)}`} muted />
-            <div className="border-t border-ink/10 pt-3">
-              <Row k="Left after WhatsApp" v={naira(contribution)} strong tone={contribution < 0 ? "clay" : "moss"} />
-            </div>
           </dl>
-        </Panel>
-        <Panel title="How clients pay">
+          <div
+            className={`mt-5 flex items-center justify-between gap-3 rounded-xl px-4 py-3.5 ${
+              contribution < 0 ? "bg-clay/[0.07]" : "bg-moss/[0.07]"
+            }`}
+          >
+            <span className="text-sm font-medium text-ink/70">Left after WhatsApp</span>
+            <span
+              className={`font-display text-lg font-semibold tracking-tight tabular-nums ${contribution < 0 ? "text-clay" : "text-moss"}`}
+            >
+              {naira(contribution)}
+            </span>
+          </div>
+        </Card>
+        <Card title="How clients pay" sub={`${naira(o.processor_fees_kobo)} to processors`} icon="card">
           <Donut
             center={String((i?.payments_by_card ?? 0) + (i?.payments_by_transfer ?? 0))}
             sub="payments"
@@ -290,12 +300,11 @@ function MoneySection({ o, days, i }: { o: Overview; days: Day[]; i: Insights | 
               { label: "Card", value: i?.payments_by_card ?? 0, color: "#f5b82e" },
             ]}
           />
-          <p className="mt-4 text-xs text-ink/50">
-            {naira(i?.collected_by_transfer_kobo ?? 0)} by transfer · {naira(o.collected_by_card_kobo)} by card ·{" "}
-            {naira(o.processor_fees_kobo)} to processors
+          <p className="mt-4 border-t border-line pt-3 text-xs text-ink/50">
+            {naira(i?.collected_by_transfer_kobo ?? 0)} by transfer · {naira(o.collected_by_card_kobo)} by card
           </p>
-        </Panel>
-        <Panel title="Currencies">
+        </Card>
+        <Card title="Currencies" sub="Documents by currency" icon="globe">
           <Donut
             center={String(o.documents_total)}
             sub="documents"
@@ -305,7 +314,7 @@ function MoneySection({ o, days, i }: { o: Overview; days: Day[]; i: Insights | 
               color: ["#10231c", "#f5b82e", "#3f8f5f", "#c2462e"][idx % 4],
             }))}
           />
-        </Panel>
+        </Card>
       </div>
     </>
   );
@@ -319,16 +328,27 @@ function GrowthSection({ o, days, i, onPro }: { o: Overview; days: Day[]; i: Ins
   const conversion = o.users_active_30d > 0 ? (100 * o.pro_users) / o.users_active_30d : null;
   return (
     <>
-      <Heading title="Growth" sub="Who is joining, and how far they get." />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Sign-ups and documents per day">
+      <SectionTitle title="Growth" sub="Who is joining, and how far they get." />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat icon="check" label="Finished setup" value={String(o.users_onboarded)} note={`of ${o.users_total} who signed up`} />
+        <Stat icon="activity" label="Active, 30 days" value={String(o.users_active_30d)} note="Sent at least one document" />
+        <Stat
+          icon="zap"
+          label="On Pro"
+          value={String(onPro ?? o.pro_users)}
+          note={`${o.pro_users} paying${conversion === null ? "" : ` · ${conversion.toFixed(1)}% of active users`}`}
+        />
+        <Stat icon="clock" label="Waitlist" value={o.waitlist_total.toLocaleString("en-NG")} note="Still waiting to be let in" />
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Card title="Sign-ups and documents" sub="Per day, last 30 days" icon="bars">
           <DualBars
-            labels={days.map((d) => shortDate(d.day))}
+            labels={days.map((d) => dayMonth(d.day))}
             a={{ name: "Sign-ups", values: days.map((d) => d.signups) }}
             b={{ name: "Documents", values: days.map((d) => d.documents) }}
           />
-        </Panel>
-        <Panel title="From sign-up to paying">
+        </Card>
+        <Card title="From sign-up to paying" sub="Each step against the one before" icon="filter">
           {i ? (
             <>
               <Funnel
@@ -342,26 +362,16 @@ function GrowthSection({ o, days, i, onPro }: { o: Overview; days: Day[]; i: Ins
                 ]}
               />
               {i.median_minutes_to_first_document !== null && (
-                <p className="mt-4 text-xs text-ink/50">
+                <p className="mt-5 border-t border-line pt-3 text-xs text-ink/50">
                   Median time from sign-up to first document:{" "}
                   <strong className="font-semibold text-ink">{formatMinutes(i.median_minutes_to_first_document)}</strong>
                 </p>
               )}
             </>
           ) : (
-            <p className="text-sm text-ink/45">Insights not available yet.</p>
+            <Empty icon="filter">Insights not available yet.</Empty>
           )}
-        </Panel>
-      </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Finished setup" value={String(o.users_onboarded)} note={`of ${o.users_total} who signed up`} />
-        <Stat label="Active, 30 days" value={String(o.users_active_30d)} note="Sent at least one document" />
-        <Stat
-          label="On Pro"
-          value={String(onPro ?? o.pro_users)}
-          note={`${o.pro_users} paying${conversion === null ? "" : ` · ${conversion.toFixed(1)}% of active users`}`}
-        />
-        <Stat label="Waitlist" value={o.waitlist_total.toLocaleString("en-NG")} note="Still waiting to be let in" />
+        </Card>
       </div>
     </>
   );
@@ -371,55 +381,53 @@ function GrowthSection({ o, days, i, onPro }: { o: Overview; days: Day[]; i: Ins
 /* Usage                                                                      */
 /* -------------------------------------------------------------------------- */
 
+const STATUS_NAME: Record<string, string> = {
+  sent: "Sent",
+  viewed: "Opened",
+  overdue: "Overdue",
+  part_paid: "Part paid",
+  paid: "Paid",
+  cancelled: "Cancelled",
+  accepted: "Accepted",
+  converted: "Converted",
+  expired: "Expired",
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  paid: "#3f8f5f",
+  overdue: "#c2462e",
+  viewed: "#f5b82e",
+  part_paid: "#d99a12",
+  sent: "#10231c",
+};
+
 function UsageSection({ o, i }: { o: Overview; i: Insights }) {
   const hours = Array.from({ length: 24 }, (_, h) => i.documents_by_hour.find((s) => Number(s.k) === h)?.n ?? 0);
-  const statusName: Record<string, string> = {
-    sent: "Sent",
-    viewed: "Opened",
-    overdue: "Overdue",
-    part_paid: "Part paid",
-    paid: "Paid",
-    cancelled: "Cancelled",
-    accepted: "Accepted",
-    converted: "Converted",
-    expired: "Expired",
-  };
   return (
     <>
-      <Heading title="Usage" sub="How people use it, and what the bot does for them." />
+      <SectionTitle title="Usage" sub="How people use it, and what the bot does for them." />
       <div className="grid gap-4 lg:grid-cols-3">
-        <Panel title="Where documents stand">
+        <Card title="Where documents stand" sub="By status" icon="pie">
           <Donut
             center={String(o.documents_total)}
             sub="documents"
             slices={i.documents_by_status.map((s) => ({
-              label: statusName[String(s.k)] ?? String(s.k),
+              label: STATUS_NAME[String(s.k)] ?? String(s.k),
               value: s.n,
-              color:
-                s.k === "paid"
-                  ? "#3f8f5f"
-                  : s.k === "overdue"
-                    ? "#c2462e"
-                    : s.k === "viewed"
-                      ? "#f5b82e"
-                      : s.k === "part_paid"
-                        ? "#d99a12"
-                        : s.k === "sent"
-                          ? "#10231c"
-                          : "#8aa399",
+              color: STATUS_COLOR[String(s.k)] ?? "#8aa399",
             }))}
           />
-        </Panel>
-        <Panel title="When invoices go out">
+        </Card>
+        <Card title="When invoices go out" sub="By hour of day" icon="clock">
           <HourStrip counts={hours} />
-          <div className="mt-5 grid grid-cols-3 gap-2 text-center">
+          <div className="mt-5 grid grid-cols-3 divide-x divide-line rounded-xl border border-line">
             <Mini label="Invoices" value={o.invoices_total} />
             <Mini label="Quotes" value={o.quotes_total} />
             <Mini label="Requests" value={o.requests_total} />
           </div>
-        </Panel>
-        <Panel title="Talking to the bot, 30 days">
-          <dl className="space-y-3 text-sm">
+        </Card>
+        <Card title="Talking to the bot" sub="Last 30 days" icon="message">
+          <dl className="space-y-3.5 text-sm">
             <Row k="Messages from users" v={i.messages_in_30d.toLocaleString("en-NG")} />
             <Row k="Messages sent" v={i.messages_out_30d.toLocaleString("en-NG")} />
             <Row k="Of which templates" v={i.templates_out_30d.toLocaleString("en-NG")} muted />
@@ -427,38 +435,47 @@ function UsageSection({ o, i }: { o: Overview; i: Insights }) {
             <Row k="Sentences read by the parser" v={i.parses_30d.toLocaleString("en-NG")} />
             <Row k="Parser, average" v={i.parser_avg_ms === null ? "—" : `${(i.parser_avg_ms / 1000).toFixed(1)}s`} muted />
           </dl>
-        </Panel>
+        </Card>
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <Panel title="Designs chosen">
+        <Card title="Designs chosen" icon="file">
           <RankedBars items={i.designs.map((s) => ({ label: titleCase(String(s.k)), value: s.n }))} />
-        </Panel>
-        <Panel title="Where the waitlist came from">
+        </Card>
+        <Card title="Where the waitlist came from" icon="globe">
           <RankedBars items={i.waitlist_sources.map((s) => ({ label: titleCase(String(s.k)), value: s.n }))} color="#f5b82e" />
-        </Panel>
-        <Panel title="What the bot sent, 30 days">
+        </Card>
+        <Card title="What the bot sent" sub="Last 30 days" icon="send">
           <RankedBars
             items={i.messages_by_kind_30d.slice(0, 8).map((s) => ({ label: titleCase(String(s.k)), value: s.n }))}
             color="#3f8f5f"
           />
-        </Panel>
+        </Card>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
+          icon="users"
           label="Clients on file"
           value={i.clients_total.toLocaleString("en-NG")}
           note={`${i.clients_with_email} with email · ${i.clients_with_phone} with WhatsApp`}
         />
         <Stat
+          icon="mail"
           label="Reminders, 30 days"
           value={String(i.reminders_sent_30d)}
           note={`${i.reminders_pending} waiting · ${i.reminders_failed} failed`}
           tone={i.reminders_failed ? "clay" : undefined}
         />
-        <Stat label="Receipts issued" value={String(i.receipts_issued)} note={`${i.payments_troubled} payments need a look`} tone={i.payments_troubled ? "clay" : undefined} />
         <Stat
+          icon="receipt"
+          label="Receipts issued"
+          value={String(i.receipts_issued)}
+          note={`${i.payments_troubled} payments need a look`}
+          tone={i.payments_troubled ? "clay" : undefined}
+        />
+        <Stat
+          icon="gift"
           label="Referrals"
           value={String(i.referrals_total)}
           note={`${i.referrals_credited} credited · ${i.risk_flags_open} risk flags open`}
@@ -470,116 +487,131 @@ function UsageSection({ o, i }: { o: Overview; i: Insights }) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Tables                                                                     */
+/* -------------------------------------------------------------------------- */
+
+function TopUsers({ rows }: { rows: Account[] }) {
+  if (!rows.length) return <Empty icon="users">Nobody has sent an invoice yet.</Empty>;
+  return (
+    <div className={table.wrap}>
+      <table className={`${table.table} min-w-[520px]`}>
+        <thead className={table.head}>
+          <tr>
+            <th className={table.th}>Business</th>
+            <th className={table.th}>Plan</th>
+            <th className={`${table.th} text-right`}>Invoiced</th>
+            <th className={`${table.th} text-right`}>Collected</th>
+          </tr>
+        </thead>
+        <tbody className="tabular-nums">
+          {rows.map((a) => {
+            const name = a.business_name ?? `+${a.wa_phone}`;
+            return (
+              <tr key={a.id} className={table.row}>
+                <td className={table.td}>
+                  <div className="flex items-center gap-3">
+                    <Avatar name={name} />
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{name}</p>
+                      <p className="text-xs text-ink/50">
+                        {a.invoices} invoice{a.invoices === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                  </div>
+                </td>
+                <td className={table.td}>
+                  <Pill tone={a.plan === "pro" ? "ink" : "neutral"} dot={false}>
+                    {a.plan === "pro" ? "Pro" : "Free"}
+                  </Pill>
+                </td>
+                <td className={`${table.td} text-right font-semibold`}>{naira(a.invoiced_kobo)}</td>
+                <td className={`${table.td} text-right text-ink/60`}>{naira(a.collected_kobo)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function LatestPayments({ rows }: { rows: Payment[] }) {
+  if (!rows.length) return <Empty icon="receipt">No payments yet.</Empty>;
+  return (
+    <div className={table.wrap}>
+      <table className={`${table.table} min-w-[520px]`}>
+        <thead className={table.head}>
+          <tr>
+            <th className={table.th}>Business</th>
+            <th className={table.th}>Method</th>
+            <th className={table.th}>Date</th>
+            <th className={`${table.th} text-right`}>Amount</th>
+          </tr>
+        </thead>
+        <tbody className="tabular-nums">
+          {rows.map((p) => {
+            const name = p.business_name ?? "—";
+            return (
+              <tr key={p.id} className={table.row}>
+                <td className={table.td}>
+                  <div className="flex items-center gap-3">
+                    <Avatar name={name} />
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{name}</p>
+                      <p className="truncate text-xs text-ink/50">
+                        {p.client_name ?? "—"}
+                        {p.document_ref && <span className="font-mono"> · {p.document_ref}</span>}
+                      </p>
+                    </div>
+                  </div>
+                </td>
+                <td className={table.td}>
+                  <Pill tone={p.provider === "paystack" ? "marigold" : "neutral"}>
+                    {p.provider === "paystack" ? "Card" : "Transfer"}
+                  </Pill>
+                </td>
+                <td className={`${table.td} whitespace-nowrap text-ink/60`}>{shortDate(p.at)}</td>
+                <td className={`${table.td} text-right font-semibold`}>{naira(p.client_total_kobo)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Pieces                                                                     */
 /* -------------------------------------------------------------------------- */
 
-function Heading({ title, sub }: { title: string; sub: string }) {
-  return (
-    <div className="mt-10 mb-4">
-      <h2 className="font-display text-xl font-bold tracking-tight">{title}</h2>
-      <p className="mt-0.5 text-sm text-ink/50">{sub}</p>
-    </div>
-  );
-}
-
-function Panel({
-  title,
-  action,
-  className = "",
-  children,
-}: {
-  title: string;
-  action?: React.ReactNode;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className={`rounded-3xl bg-white p-5 ring-1 ring-ink/10 ring-inset sm:p-6 ${className}`}>
-      <div className="mb-4 flex items-baseline justify-between gap-3">
-        <h3 className="text-[0.72rem] font-semibold tracking-[0.08em] text-ink/50 uppercase">{title}</h3>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Stat({ label, value, note, tone }: { label: string; value: string; note?: string; tone?: "clay" }) {
-  return (
-    <div className="rounded-[20px] bg-white px-5 py-4 ring-1 ring-ink/10 ring-inset">
-      <p className="text-[0.7rem] font-semibold tracking-[0.08em] text-ink/45 uppercase">{label}</p>
-      <p className={`mt-1 font-display text-2xl font-extrabold tracking-tight tabular-nums ${tone === "clay" ? "text-clay" : ""}`}>
-        {value}
-      </p>
-      {note && <p className="mt-1 text-xs leading-relaxed text-ink/50">{note}</p>}
-    </div>
-  );
-}
-
 function Mini({ label, value, tone }: { label: string; value: number; tone?: "moss" | "clay" }) {
   return (
-    <div className="rounded-2xl bg-cream px-2 py-2.5">
-      <p className={`font-display text-xl font-extrabold tabular-nums ${tone === "moss" ? "text-moss" : tone === "clay" ? "text-clay" : ""}`}>
-        {value}
-      </p>
-      <p className="text-[0.68rem] text-ink/50">{label}</p>
-    </div>
-  );
-}
-
-function Row({ k, v, strong, muted, tone }: { k: string; v: string; strong?: boolean; muted?: boolean; tone?: "clay" | "moss" }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className={muted ? "text-ink/45" : "text-ink/70"}>{k}</dt>
-      <dd
-        className={`tabular-nums ${strong ? "font-display text-base font-bold" : ""} ${
-          tone === "clay" ? "text-clay" : tone === "moss" ? "text-moss" : muted ? "text-ink/45" : ""
+    <div className="px-2 py-3 text-center">
+      <p
+        className={`font-display text-xl font-semibold tracking-tight tabular-nums ${
+          tone === "moss" ? "text-moss" : tone === "clay" ? "text-clay" : ""
         }`}
       >
-        {v}
-      </dd>
+        {value.toLocaleString("en-NG")}
+      </p>
+      <p className="mt-0.5 text-xs text-ink/50">{label}</p>
     </div>
   );
 }
 
-function More({ href, children }: { href: string; children: React.ReactNode }) {
+function Row({ k, v, strong, muted }: { k: string; v: string; strong?: boolean; muted?: boolean }) {
   return (
-    <Link href={href} className="text-sm font-semibold text-ink/55 hover:text-ink">
-      {children} →
-    </Link>
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className={muted ? "text-ink/45" : "text-ink/65"}>{k}</dt>
+      <dd className={`tabular-nums ${strong ? "font-semibold text-ink" : muted ? "text-ink/45" : "font-medium"}`}>{v}</dd>
+    </div>
   );
 }
 
-function List({
-  rows,
-  empty,
-}: {
-  rows: { key: string; rank?: number; left: string; sub: string; right: string; rightSub: string }[];
-  empty: string;
-}) {
-  if (!rows.length) return <p className="text-sm text-ink/45">{empty}</p>;
-  return (
-    <ul className="-my-2 divide-y divide-ink/8">
-      {rows.map((r) => (
-        <li key={r.key} className="flex items-center justify-between gap-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            {r.rank !== undefined && (
-              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-cream text-xs font-bold">{r.rank}</span>
-            )}
-            <div className="min-w-0">
-              <p className="truncate font-semibold">{r.left}</p>
-              <p className="truncate text-xs text-ink/50">{r.sub}</p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="font-display font-bold tabular-nums">{r.right}</p>
-            <p className="text-xs text-ink/50">{r.rightSub}</p>
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}
+/** "25 Sep", for chart labels where the year is noise. */
+const dayMonth = (iso: string) =>
+  new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Africa/Lagos" }).format(new Date(iso));
 
 /* -------------------------------------------------------------------------- */
 /* Formatting                                                                 */

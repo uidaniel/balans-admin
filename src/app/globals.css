@@ -13,8 +13,12 @@
   --color-moss: #3f8f5f;
   --color-clay: #c2462e;
 
+  /* Back-office neutrals: a cool canvas so white cards and the brand colours read. */
+  --color-canvas: #f4f5f2;
+  --color-line: #e6e8e3;
+
   --font-display: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
 
@@ -26,10 +30,11 @@ html {
 }
 
 body {
-  background: var(--color-cream);
+  background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "cv11";
 }
 
 ::selection {

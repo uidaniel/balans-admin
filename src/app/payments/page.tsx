@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { naira } from "@/lib/money";
 import { loadPayments } from "@/lib/dashboard";
+import { Avatar, Card, Empty, Pill, Segmented, Stat, table, type PillTone } from "@/components/ui";
 import { Failed, gate, Shell } from "../shell";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +12,13 @@ const FILTERS = [
   { id: "needs_review", label: "Needs review" },
   { id: "all", label: "All" },
 ] as const;
+
+const STATUS: Record<string, { label: string; tone: PillTone }> = {
+  success: { label: "Paid", tone: "moss" },
+  initialised: { label: "Started", tone: "neutral" },
+  failed: { label: "Failed", tone: "clay" },
+  needs_review: { label: "Needs review", tone: "marigold" },
+};
 
 const when = (iso: string) =>
   new Intl.DateTimeFormat("en-GB", {
@@ -42,73 +49,90 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       email={g.staff.email}
       current="/payments"
       title="Payments"
-      sub={
-        payments.data
-          ? `${rows.length} shown · ${naira(sum((p) => p.client_total_kobo))} paid by clients · ${naira(
-              sum((p) => p.balans_fee_kobo),
-            )} to Balans · ${naira(sum((p) => p.provider_fee_kobo))} to processors`
-          : undefined
-      }
+      sub="The ledger, newest first: what the client paid, and where each naira went."
     >
-      <nav className="mb-5 flex flex-wrap gap-2">
-        {FILTERS.map((f) => (
-          <Link
-            key={f.id}
-            href={`/payments?status=${f.id}`}
-            aria-current={f.id === status ? "page" : undefined}
-            className={`inline-flex h-9 items-center rounded-full px-4 text-sm font-semibold ring-1 ring-inset ${
-              f.id === status ? "bg-ink text-cream ring-ink" : "bg-white text-ink/60 ring-ink/15 hover:text-ink"
-            }`}
-          >
-            {f.label}
-          </Link>
-        ))}
-      </nav>
-
-      {payments.error ? (
-        <Failed what="payments" error={payments.error} />
-      ) : rows.length === 0 ? (
-        <p className="rounded-[20px] bg-white px-5 py-4 text-sm text-ink/55 ring-1 ring-ink/10 ring-inset">
-          No payments here.
-        </p>
-      ) : (
-        <div className="overflow-x-auto rounded-[20px] bg-white ring-1 ring-ink/10 ring-inset">
-          <table className="w-full min-w-[980px] text-left text-sm">
-            <thead className="text-ink/45">
-              <tr>
-                <th className="px-5 py-3 font-semibold">When</th>
-                <th className="px-3 py-3 font-semibold">Business</th>
-                <th className="px-3 py-3 font-semibold">Client</th>
-                <th className="px-3 py-3 font-semibold">Invoice</th>
-                <th className="px-3 py-3 font-semibold">How</th>
-                <th className="px-3 py-3 text-right font-semibold">Client paid</th>
-                <th className="px-3 py-3 text-right font-semibold">Processor</th>
-                <th className="px-3 py-3 text-right font-semibold">Balans</th>
-                <th className="px-5 py-3 text-right font-semibold">To user</th>
-              </tr>
-            </thead>
-            <tbody className="tabular-nums">
-              {rows.map((p) => (
-                <tr key={p.id} className="border-t border-ink/8">
-                  <td className="px-5 py-3 whitespace-nowrap text-ink/60">{when(p.at)}</td>
-                  <td className="px-3 py-3 font-semibold">{p.business_name ?? "—"}</td>
-                  <td className="px-3 py-3">{p.client_name ?? "—"}</td>
-                  <td className="px-3 py-3 font-mono text-xs">{p.document_ref ?? "—"}</td>
-                  <td className="px-3 py-3">
-                    {p.provider === "paystack" ? "Card" : "Transfer"}
-                    {p.currency !== "NGN" && <span className="ml-1 text-xs text-ink/50">{p.currency}</span>}
-                    {p.status !== "success" && <span className="ml-1 text-xs text-clay">{p.status}</span>}
-                  </td>
-                  <td className="px-3 py-3 text-right font-semibold">{naira(p.client_total_kobo)}</td>
-                  <td className="px-3 py-3 text-right text-ink/60">{naira(p.provider_fee_kobo)}</td>
-                  <td className="px-3 py-3 text-right text-ink/60">{naira(p.balans_fee_kobo)}</td>
-                  <td className="px-5 py-3 text-right">{naira(p.to_user_kobo)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {payments.data && (
+        <div className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Stat icon="wallet" label="Paid by clients" value={naira(sum((p) => p.client_total_kobo))} note={`${rows.length} payments shown`} />
+          <Stat icon="trending" label="To Balans" value={naira(sum((p) => p.balans_fee_kobo))} tone="moss" />
+          <Stat icon="card" label="To processors" value={naira(sum((p) => p.provider_fee_kobo))} />
+          <Stat icon="send" label="Reached users" value={naira(sum((p) => p.to_user_kobo))} />
         </div>
       )}
+
+      <Card flush>
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
+          <div>
+            <h3 className="text-[0.95rem] font-semibold tracking-tight">All payments</h3>
+            <p className="text-xs text-ink/50">Up to 500, newest first</p>
+          </div>
+          <Segmented current={status} items={FILTERS.map((f) => ({ id: f.id, label: f.label, href: `/payments?status=${f.id}` }))} />
+        </div>
+
+        {payments.error ? (
+          <div className="px-5 pb-5">
+            <Failed what="payments" error={payments.error} />
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="border-t border-line">
+            <Empty icon="receipt">No payments here.</Empty>
+          </div>
+        ) : (
+          <div className={table.wrap}>
+            <table className={`${table.table} min-w-255`}>
+              <thead className={table.head}>
+                <tr>
+                  <th className={table.th}>Business</th>
+                  <th className={table.th}>Invoice</th>
+                  <th className={table.th}>Method</th>
+                  <th className={table.th}>Status</th>
+                  <th className={table.th}>When</th>
+                  <th className={`${table.th} text-right`}>Client paid</th>
+                  <th className={`${table.th} text-right`}>Processor</th>
+                  <th className={`${table.th} text-right`}>Balans</th>
+                  <th className={`${table.th} text-right`}>To user</th>
+                </tr>
+              </thead>
+              <tbody className="tabular-nums">
+                {rows.map((p) => {
+                  const name = p.business_name ?? "—";
+                  const st = STATUS[p.status] ?? { label: p.status, tone: "neutral" as const };
+                  return (
+                    <tr key={p.id} className={table.row}>
+                      <td className={table.td}>
+                        <div className="flex items-center gap-3">
+                          <Avatar name={name} />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{name}</p>
+                            <p className="truncate text-xs text-ink/50">{p.client_name ?? "—"}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className={`${table.td} font-mono text-xs text-ink/70`}>{p.document_ref ?? "—"}</td>
+                      <td className={table.td}>
+                        <span className="inline-flex items-center gap-1.5">
+                          <Pill tone={p.provider === "paystack" ? "marigold" : "neutral"} dot={false}>
+                            {p.provider === "paystack" ? "Card" : "Transfer"}
+                          </Pill>
+                          {p.currency !== "NGN" && <span className="text-xs font-medium text-ink/50">{p.currency}</span>}
+                        </span>
+                      </td>
+                      <td className={table.td}>
+                        <Pill tone={st.tone}>{st.label}</Pill>
+                      </td>
+                      <td className={`${table.td} whitespace-nowrap text-ink/60`}>{when(p.at)}</td>
+                      <td className={`${table.td} text-right font-semibold`}>{naira(p.client_total_kobo)}</td>
+                      <td className={`${table.td} text-right text-ink/55`}>{naira(p.provider_fee_kobo)}</td>
+                      <td className={`${table.td} text-right text-moss`}>{naira(p.balans_fee_kobo)}</td>
+                      <td className={`${table.td} text-right`}>{naira(p.to_user_kobo)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </Shell>
   );
 }

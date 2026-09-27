@@ -1,4 +1,5 @@
 import { naira } from "@/lib/money";
+import { Empty, Pill, SectionTitle } from "@/components/ui";
 
 /**
  * The numbers that decide whether the campaigns are working.
@@ -46,19 +47,28 @@ function Metric({
   ok?: boolean | null;
   hint?: string;
 }) {
-  const tone =
-    ok === null || ok === undefined
-      ? "text-ink/35"
-      : ok
-        ? "text-moss"
-        : "text-clay";
-
+  const known = ok !== null && ok !== undefined;
   return (
-    <div className="rounded-2xl bg-white px-5 py-4 ring-1 ring-ink/10 ring-inset">
-      <p className="text-[0.7rem] font-semibold tracking-[0.08em] text-ink/45 uppercase">{label}</p>
-      <p className={`mt-1 font-display text-2xl font-bold tracking-tight ${tone}`}>{value}</p>
-      {target && <p className="mt-1 text-xs text-ink/45">Target {target}</p>}
-      {hint && <p className="mt-2 text-xs leading-relaxed text-ink/55">{hint}</p>}
+    <div className="flex flex-col rounded-2xl border border-line bg-white p-5">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm font-medium text-ink/55">{label}</p>
+        {known && (
+          <Pill tone={ok ? "moss" : "clay"}>{ok ? "On track" : "Below target"}</Pill>
+        )}
+      </div>
+      <p
+        className={`mt-2 font-display text-[1.6rem] leading-tight font-semibold tracking-tight tabular-nums ${
+          !known ? "" : ok ? "text-moss" : "text-clay"
+        }`}
+      >
+        {value}
+      </p>
+      {target && (
+        <p className="mt-1 text-xs text-ink/45">
+          Target <span className="font-semibold text-ink/70">{target}</span>
+        </p>
+      )}
+      {hint && <p className="mt-3 border-t border-line pt-3 text-xs leading-relaxed text-ink/55">{hint}</p>}
     </div>
   );
 }
@@ -66,9 +76,9 @@ function Metric({
 export function MetricsPanel({ m }: { m: Metrics | null }) {
   if (!m) {
     return (
-      <p className="rounded-2xl bg-white px-5 py-4 text-sm text-ink/55 ring-1 ring-ink/10 ring-inset">
-        No metrics yet. They appear once the first invoice is sent.
-      </p>
+      <div className="mt-10 rounded-2xl border border-line bg-white">
+        <Empty icon="shield">No health checks yet. They appear once the first invoice is sent.</Empty>
+      </div>
     );
   }
 
@@ -79,13 +89,13 @@ export function MetricsPanel({ m }: { m: Metrics | null }) {
   const contribution = num(m.contribution_naira_30d);
 
   return (
-    <section className="mt-8">
-      <h2 className="font-display text-lg font-bold tracking-tight">Last 30 days</h2>
-      <p className="mt-1 text-sm text-ink/55">
-        Active means they sent something, not that they signed up.
-      </p>
+    <section>
+      <SectionTitle
+        title="Health checks"
+        sub="Rolling 30 days, each against the level where it stops being fine. Active means they sent something, not that they signed up."
+      />
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <Metric
           label="Active users"
           value={`${m.users_active} of ${m.users_total}`}
@@ -128,8 +138,8 @@ export function MetricsPanel({ m }: { m: Metrics | null }) {
         />
       </div>
 
-      <h2 className="mt-10 font-display text-lg font-bold tracking-tight">Money</h2>
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <h3 className="mt-8 mb-3 text-sm font-semibold text-ink/70">Unit economics</h3>
+      <div className="grid gap-4 sm:grid-cols-3">
         <Metric
           label="Fees earned"
           value={naira(Math.round((num(m.fees_earned_naira_30d) ?? 0) * 100))}

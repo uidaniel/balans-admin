@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { supabaseConfigured } from "@/lib/supabase";
 import { access, type Staff } from "@/lib/supabase-server";
+import { Avatar, Logo } from "@/components/ui";
+import { Icon, type IconName } from "@/components/icons";
 import { signOut } from "./actions";
 
 /*
@@ -23,11 +25,13 @@ export async function gate(): Promise<Gate> {
 }
 
 const NAV = [
-  { href: "/", label: "Overview" },
-  { href: "/users", label: "Users" },
-  { href: "/payments", label: "Payments" },
-  { href: "/waitlist", label: "Waitlist" },
-] as const;
+  { href: "/", label: "Overview", icon: "overview", group: "Business" },
+  { href: "/users", label: "Users", icon: "users", group: "Business" },
+  { href: "/payments", label: "Payments", icon: "card", group: "Business" },
+  { href: "/waitlist", label: "Waitlist", icon: "clock", group: "Growth" },
+] as const satisfies readonly { href: string; label: string; icon: IconName; group: string }[];
+
+const GROUPS = ["Business", "Growth"] as const;
 
 export function Shell({
   email,
@@ -44,54 +48,148 @@ export function Shell({
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const name = email.split("@")[0] ?? email;
   return (
-    <div className="container-x py-8">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <nav className="flex flex-wrap items-center gap-1 rounded-full bg-white p-1 ring-1 ring-ink/10 ring-inset">
+    <div className="min-h-dvh">
+      {/* Sidebar, from lg up. */}
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-line bg-white px-4 py-5 lg:flex">
+        <Link href="/" className="flex items-center gap-2.5 px-2">
+          <Logo tone="light" className="h-7 w-auto" />
+          <span className="rounded-md bg-canvas px-1.5 py-0.5 text-[0.68rem] font-semibold tracking-wide text-ink/55 uppercase">
+            Admin
+          </span>
+        </Link>
+
+        <nav className="mt-8 flex-1 space-y-6 overflow-y-auto">
+          {GROUPS.map((group) => (
+            <div key={group}>
+              <p className="px-3 text-[0.7rem] font-medium tracking-wider text-ink/35 uppercase">{group}</p>
+              <ul className="mt-2 space-y-0.5">
+                {NAV.filter((n) => n.group === group).map((n) => {
+                  const on = n.href === current;
+                  return (
+                    <li key={n.href}>
+                      <Link
+                        href={n.href}
+                        aria-current={on ? "page" : undefined}
+                        className={`flex h-10 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors ${
+                          on ? "bg-ink text-cream" : "text-ink/60 hover:bg-canvas hover:text-ink"
+                        }`}
+                      >
+                        <Icon name={n.icon} className={`size-[1.1rem] ${on ? "text-marigold" : ""}`} />
+                        {n.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
+
+        <div className="rounded-2xl border border-line bg-canvas/60 p-3">
+          <div className="flex items-center gap-3">
+            <Avatar name={name} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">{name}</p>
+              <p className="truncate text-xs text-ink/50">{email}</p>
+            </div>
+            <form action={signOut}>
+              <button
+                type="submit"
+                title="Sign out"
+                aria-label="Sign out"
+                className="grid size-8 place-items-center rounded-lg text-ink/50 transition-colors hover:bg-white hover:text-clay"
+              >
+                <Icon name="logout" className="size-4" />
+              </button>
+            </form>
+          </div>
+        </div>
+      </aside>
+
+      {/* Top bar, below lg. */}
+      <header className="sticky top-0 z-30 border-b border-line bg-white/90 backdrop-blur lg:hidden">
+        <div className="flex h-14 items-center justify-between px-4 sm:px-6">
+          <Link href="/" className="flex items-center gap-2">
+            <Logo tone="light" className="h-6 w-auto" />
+            <span className="rounded-md bg-canvas px-1.5 py-0.5 text-[0.65rem] font-semibold tracking-wide text-ink/55 uppercase">
+              Admin
+            </span>
+          </Link>
+          <form action={signOut}>
+            <button
+              type="submit"
+              aria-label="Sign out"
+              className="grid size-9 place-items-center rounded-lg text-ink/55 hover:bg-canvas hover:text-clay"
+            >
+              <Icon name="logout" className="size-4" />
+            </button>
+          </form>
+        </div>
+        <nav className="flex gap-1 overflow-x-auto px-3 pb-2 sm:px-5">
           {NAV.map((n) => (
             <Link
               key={n.href}
               href={n.href}
               aria-current={n.href === current ? "page" : undefined}
-              className={`inline-flex h-9 items-center rounded-full px-4 text-sm font-semibold transition-colors ${
-                n.href === current ? "bg-ink text-cream" : "text-ink/60 hover:text-ink"
+              className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium ${
+                n.href === current ? "bg-ink text-cream" : "text-ink/60 hover:bg-canvas"
               }`}
             >
+              <Icon name={n.icon} className={`size-4 ${n.href === current ? "text-marigold" : ""}`} />
               {n.label}
             </Link>
           ))}
         </nav>
-        <div className="flex items-center gap-3">
-          <span className="hidden text-sm text-ink/50 sm:inline">{email}</span>
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="inline-flex h-9 items-center rounded-full px-3 text-sm font-semibold text-ink/60 transition-colors hover:text-ink"
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
       </header>
 
-      <div className="mt-8 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight">{title}</h1>
-          {sub && <p className="mt-1 text-sm text-ink/55">{sub}</p>}
+      <main className="lg:pl-64">
+        <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-xs font-medium text-ink/45">
+                <span className="relative flex size-2">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-moss opacity-50 motion-reduce:hidden" />
+                  <span className="relative inline-flex size-2 rounded-full bg-moss" />
+                </span>
+                Live · {lagosNow()} Lagos
+              </p>
+              <h1 className="mt-1.5 font-display text-[1.75rem] leading-tight font-semibold tracking-tight">{title}</h1>
+              {sub && <p className="mt-1 max-w-3xl text-sm text-ink/55">{sub}</p>}
+            </div>
+            {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+          </div>
+          <div className="mt-6">{children}</div>
         </div>
-        {actions}
-      </div>
-      <div className="mt-6">{children}</div>
+      </main>
     </div>
   );
 }
 
+function lagosNow(): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Africa/Lagos",
+  }).format(new Date());
+}
+
 export function Failed({ what, error }: { what: string; error: string }) {
   return (
-    <p className="rounded-2xl bg-white px-5 py-4 text-sm text-clay ring-1 ring-clay/20 ring-inset">
-      Could not read {what}: {error}. If this says a table or relation does not exist, the API has not yet
-      applied its latest migrations to this database — they run when it next deploys.
-    </p>
+    <div className="flex gap-3 rounded-2xl border border-clay/20 bg-clay/[0.04] px-5 py-4 text-sm">
+      <span className="mt-0.5 text-clay">
+        <Icon name="alert" className="size-4" />
+      </span>
+      <p className="leading-relaxed text-ink/75">
+        <strong className="font-semibold text-clay">Could not read {what}:</strong> {error}. If this says a table or
+        relation does not exist, the API has not yet applied its latest migrations to this database — they run when it
+        next deploys.
+      </p>
+    </div>
   );
 }
 
@@ -105,8 +203,8 @@ function NotStaff({ authUserId, email }: { authUserId: string; email: string }) 
 values ('${authUserId}', '${email}', 'admin');`;
   return (
     <main className="container-x grid min-h-dvh max-w-2xl place-items-center py-10">
-      <div className="w-full rounded-[20px] bg-white px-6 py-6 ring-1 ring-ink/10 ring-inset">
-        <h1 className="font-display text-xl font-bold tracking-tight">You are signed in, but not staff</h1>
+      <div className="w-full rounded-2xl border border-line bg-white px-6 py-6">
+        <h1 className="font-display text-xl font-semibold tracking-tight">You are signed in, but not staff</h1>
         <p className="mt-3 leading-relaxed text-ink/70">
           Signing in is not the same as being allowed in. To add <strong>{email}</strong>, run this in the
           Supabase SQL editor, then reload:
@@ -127,8 +225,8 @@ values ('${authUserId}', '${email}', 'admin');`;
 function NotConfigured() {
   return (
     <main className="container-x grid min-h-dvh max-w-xl place-items-center py-10">
-      <div className="rounded-[20px] bg-white px-6 py-6 ring-1 ring-ink/10 ring-inset">
-        <h1 className="font-display text-xl font-bold tracking-tight">Admin is not configured</h1>
+      <div className="rounded-2xl border border-line bg-white px-6 py-6">
+        <h1 className="font-display text-xl font-semibold tracking-tight">Admin is not configured</h1>
         <p className="mt-3 leading-relaxed text-ink/70">
           Set <code className="rounded bg-ink/8 px-1.5 py-0.5 text-[0.9em]">NEXT_PUBLIC_SUPABASE_URL</code>,{" "}
           <code className="rounded bg-ink/8 px-1.5 py-0.5 text-[0.9em]">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> and{" "}
