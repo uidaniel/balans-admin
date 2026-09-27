@@ -29,6 +29,7 @@ const NAV = [
   { href: "/users", label: "Users", icon: "users", group: "Business" },
   { href: "/payments", label: "Payments", icon: "card", group: "Business" },
   { href: "/waitlist", label: "Waitlist", icon: "clock", group: "Growth" },
+  { href: "/broadcast", label: "Broadcast", icon: "send", group: "Growth" },
 ] as const satisfies readonly { href: string; label: string; icon: IconName; group: string }[];
 
 const GROUPS = ["Business", "Growth"] as const;
