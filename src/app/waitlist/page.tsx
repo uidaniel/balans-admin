@@ -60,7 +60,7 @@ export default async function WaitlistPage() {
             />
           </div>
           <div className="mt-4">
-            <WaitlistTable rows={rows} />
+            <WaitlistTable rows={rows} canRemove={g.staff.role === "admin"} />
           </div>
         </>
       )}
