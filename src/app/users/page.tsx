@@ -1,5 +1,5 @@
 import { naira, shortDate } from "@/lib/money";
-import { loadAccounts, type AccountSort } from "@/lib/dashboard";
+import { loadAccounts, loadUnverifiedSubaccounts, type AccountSort } from "@/lib/dashboard";
 import { Avatar, Card, Empty, Pill, Segmented, Stat, table } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { serviceClient } from "@/lib/supabase";
@@ -39,6 +39,8 @@ export default async function UsersPage({
     // Only Pro accounts have an end date worth showing, and there are few of them.
     serviceClient().from("users").select("id, plan_expires_at").eq("plan", "pro"),
   ]);
+  const unverified = await loadUnverifiedSubaccounts();
+  const toVerify = new Set((unverified.data ?? []).map((u) => u.userId));
   const proUntil = new Map((pros.data ?? []).map((u) => [u.id as string, (u.plan_expires_at as string | null) ?? null]));
   const canChange = g.staff.role === "admin";
   const here = `/users?${new URLSearchParams({ ...(q ? { q } : {}), sort }).toString()}`;
@@ -156,6 +158,7 @@ export default async function UsersPage({
                             </p>
                             <div className="mt-0.5 flex flex-wrap gap-1">
                               {!a.onboarded_at && <Pill tone="marigold">Setup unfinished</Pill>}
+                              {toVerify.has(a.id) && <Pill tone="clay">Verify on Paystack</Pill>}
                               {a.status !== "active" && <Pill tone="clay">{a.status}</Pill>}
                             </div>
                           </div>

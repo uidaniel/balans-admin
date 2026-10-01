@@ -1,6 +1,7 @@
+import { Icon } from "@/components/icons";
 import { serviceClient } from "@/lib/supabase";
 import { naira, shortDate } from "@/lib/money";
-import {
+import { loadUnverifiedSubaccounts, PAYSTACK_SUBACCOUNTS_URL,
   loadAccounts,
   loadDaily,
   loadInsights,
@@ -49,6 +50,8 @@ export default async function OverviewPage() {
     loadPayments("success"),
     loadHealth(),
   ]);
+  const unverified = await loadUnverifiedSubaccounts();
+  const waiting = unverified.data ?? [];
 
   /*
    * Two different questions, both answered. `pro_users` counts subscriptions
@@ -66,6 +69,34 @@ export default async function OverviewPage() {
       title="Overview"
       sub="How it is going, where the money is, who is using it, and what needs a look."
     >
+      {waiting.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-start gap-3 rounded-2xl border border-clay/25 bg-clay/[0.05] px-5 py-4 text-sm">
+          <span className="mt-0.5 text-clay">
+            <Icon name="alert" className="size-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-clay">
+              {waiting.length} Paystack subaccount{waiting.length === 1 ? "" : "s"} to verify
+            </p>
+            <p className="mt-0.5 leading-relaxed text-ink/70">
+              Paystack holds card payments to these until they are verified:{" "}
+              <strong className="font-semibold text-ink">
+                {waiting.map((w) => w.business ?? "Unnamed").join(", ")}
+              </strong>
+              . Tick each one on Paystack&apos;s Subaccounts page and press Verify subaccounts. This clears within the hour
+              after.
+            </p>
+          </div>
+          <a
+            href={PAYSTACK_SUBACCOUNTS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-ink px-3.5 text-sm font-medium text-cream hover:bg-ink-3"
+          >
+            Open Paystack
+          </a>
+        </div>
+      )}
       {overview.error || !daily.data ? (
         <Failed what="the overview" error={overview.error ?? daily.error ?? "unknown"} />
       ) : (

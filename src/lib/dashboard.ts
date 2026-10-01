@@ -266,3 +266,31 @@ export async function loadInsights(): Promise<Loaded<Insights>> {
   }
   return { data: out as Insights, error: null };
 }
+
+/** Paystack's page where subaccounts are ticked and verified. */
+export const PAYSTACK_SUBACCOUNTS_URL = "https://dashboard.paystack.com/#/subaccounts";
+
+/**
+ * Users whose Paystack subaccount is not verified yet.
+ *
+ * Paystack holds a client's card payment to an unverified subaccount
+ * indefinitely and has no API to verify one, so this is a job for staff, and
+ * the API keeps the status current hourly (payments/subaccount-verification.ts
+ * in the API). Keyed by user id for the users list.
+ */
+export async function loadUnverifiedSubaccounts(): Promise<Loaded<{ userId: string; business: string | null }[]>> {
+  const { data, error } = await serviceClient()
+    .from("bank_accounts")
+    .select("user_id, users(business_name)")
+    .eq("status", "active")
+    .eq("paystack_subaccount_status", "unverified");
+  if (error || !data) return { data: null, error: error?.message ?? "no rows" };
+  return {
+    data: data.map((r) => {
+      const u = r.users as { business_name: string | null } | { business_name: string | null }[] | null;
+      const one = Array.isArray(u) ? u[0] : u;
+      return { userId: r.user_id as string, business: one?.business_name ?? null };
+    }),
+    error: null,
+  };
+}
