@@ -52,6 +52,8 @@ export type Audience = { people: number; phones: number; emails: number };
 
 export type BroadcastPage = {
   campaign: Campaign | null;
+  /** Still to send this campaign to; null when it could not be counted. */
+  unsent: number | null;
   /** Meta's word for it: APPROVED, PENDING, REJECTED, or null if unknown. */
   templateStatus: string | null;
   statusCheckedAt: string | null;
@@ -73,12 +75,14 @@ export async function loadBroadcastPage(): Promise<BroadcastPage> {
   const db = serviceClient();
   const live = () => db.from("waitlist").select("id", { count: "exact", head: true }).is("unsubscribed_at", null);
 
-  const [config, people, phones, emails, history] = await Promise.all([
+  const [config, people, phones, emails, history, unsent] = await Promise.all([
     db.from("config").select("key, value_json, updated_at").in("key", [`broadcast.${CAMPAIGN}`, "template_status"]),
     live(),
     live().not("phone", "is", null),
     live().not("email", "is", null),
     db.from("admin_broadcasts").select("*").eq("campaign", CAMPAIGN).order("created_at", { ascending: false }).limit(30),
+    // Who this campaign has not gone to yet, oldest first (migration 0041).
+    db.rpc("waitlist_unsent", { p_campaign: CAMPAIGN }).select("id"),
   ]);
 
   const rows = config.data ?? [];
@@ -93,6 +97,7 @@ export async function loadBroadcastPage(): Promise<BroadcastPage> {
   return {
     campaign,
     templateStatus,
+    unsent: unsent.error ? null : ((unsent.data ?? []) as unknown[]).length,
     statusCheckedAt: (statuses?.updated_at as string | undefined) ?? null,
     audience: countError
       ? { data: null, error: countError.message }

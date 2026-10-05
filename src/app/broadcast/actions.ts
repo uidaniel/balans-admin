@@ -67,8 +67,14 @@ export async function sendToEveryone(form: FormData): Promise<void> {
   const approved = (status?.value_json as Record<string, string> | undefined)?.[CAMPAIGN] === "APPROVED";
   if (!approved) back({ error: "Meta has not approved the template yet. Nothing was sent." });
 
-  // One locked call: a second press, or two admins at once, finds the first.
-  const { error } = await db.rpc("queue_waitlist_broadcast", { p_campaign: CAMPAIGN, p_by: staff.email });
+  // How many, oldest first; blank is everyone still waiting (migration 0041).
+  const raw = String(form.get("count") ?? "").trim();
+  const limit = raw === "" ? null : Number(raw);
+  if (limit !== null && (!Number.isInteger(limit) || limit < 1)) back({ error: "Give a whole number of people, or leave it blank for everyone." });
+
+  // One locked call: a second press, or two admins at once, finds the first,
+  // and nobody already sent to is sent to again.
+  const { error } = await db.rpc("queue_waitlist_batch", { p_campaign: CAMPAIGN, p_by: staff.email, p_limit: limit });
   if (error) back({ error: error.message });
 
   revalidatePath("/broadcast");

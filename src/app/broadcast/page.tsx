@@ -28,7 +28,8 @@ export default async function BroadcastPage({
   const history = page.history.data ?? [];
   const approved = page.templateStatus === "APPROVED";
   const busy = history.some((b) => b.status === "queued" || b.status === "sending");
-  const alreadySent = history.some((b) => b.kind === "live" && b.status !== "failed" && b.status !== "cancelled");
+  // Everyone has had it: nothing left to send (sent in batches, oldest first).
+  const alreadySent = page.unsent === 0;
   const isAdmin = g.staff.role === "admin";
 
   return (
@@ -128,20 +129,33 @@ export default async function BroadcastPage({
             </form>
           </Card>
 
-          <Card title="Send to everyone" sub="The whole waitlist, once" icon="zap">
+          <Card title="Send to the waitlist" sub="Oldest sign-ups first, in as many batches as you like" icon="zap">
             {alreadySent ? (
               <p className="text-sm leading-relaxed text-ink/65">
-                This has already gone to the waitlist — see the history below. It can only be sent once, so nobody gets it
-                twice.
+                Everyone on the waitlist has had this — see the history below. Nobody is ever sent it twice.
               </p>
             ) : !isAdmin ? (
               <p className="text-sm text-ink/65">Only an admin can send to the whole waitlist.</p>
             ) : (
               <form action={sendToEveryone} className="space-y-3">
                 <p className="text-sm leading-relaxed text-ink/65">
-                  Sends to {page.audience.data ? fmt(page.audience.data.people) : "everyone"} on the waitlist: WhatsApp to
-                  each number, email to each address. This cannot be undone.
+                  {page.unsent === null ? "Some people" : fmt(page.unsent)} of{" "}
+                  {page.audience.data ? fmt(page.audience.data.people) : "the waitlist"} have not had it yet. It goes to the
+                  earliest sign-ups first: WhatsApp to each number, email to each address. Nobody already sent to is sent
+                  it again. This cannot be undone.
                 </p>
+                <label className="block">
+                  <span className="text-xs font-medium text-ink/55">How many (blank = everyone still waiting)</span>
+                  <input
+                    name="count"
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    placeholder={page.unsent === null ? "All" : `All ${fmt(page.unsent)}`}
+                    disabled={!approved}
+                    className="mt-1 h-10 w-full rounded-xl border border-line bg-white px-3 text-sm outline-none focus:border-ink/40 focus:ring-4 focus:ring-ink/5 disabled:bg-canvas"
+                  />
+                </label>
                 <label className="block">
                   <span className="text-xs font-medium text-ink/55">Type SEND to confirm</span>
                   <input
@@ -157,7 +171,7 @@ export default async function BroadcastPage({
                   className="inline-flex h-10 items-center gap-2 rounded-xl bg-marigold px-4 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Icon name="zap" className="size-4" />
-                  Send to everyone
+                  Send
                 </button>
                 {!approved && (
                   <p className="text-xs text-ink/50">Unlocks when Meta approves the template. This page checks every few minutes.</p>
@@ -223,7 +237,7 @@ function HistoryRow({ b }: { b: BroadcastRow }) {
       </td>
       <td className={table.td}>
         <Pill tone={b.kind === "live" ? "ink" : "neutral"} dot={false}>
-          {b.kind === "live" ? "Everyone" : "Test"}
+          {b.kind === "live" ? "Waitlist" : "Test"}
         </Pill>
       </td>
       <td className={table.td}>
