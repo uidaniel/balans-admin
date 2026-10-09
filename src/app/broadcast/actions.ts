@@ -18,6 +18,8 @@ const back = (params: Record<string, string>) => redirect(`/broadcast?${new URLS
 export async function sendTest(form: FormData): Promise<void> {
   const staff = await currentStaff();
   if (!staff) redirect("/login");
+  // The launch message to any number or address is an admin's call too.
+  if (staff.role !== "admin") back({ error: "Only an admin can send a test." });
 
   const phoneTyped = String(form.get("phone") ?? "").trim();
   const emailTyped = String(form.get("email") ?? "").trim().toLowerCase();

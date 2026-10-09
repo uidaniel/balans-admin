@@ -45,7 +45,8 @@ export async function GET(req: Request) {
 
   // Only a path is ever allowed through, so `?next=https://elsewhere` cannot
   // turn a sign-in link into an open redirect.
-  return back(next.startsWith("/") && !next.startsWith("//") ? next : "/");
+  // A backslash too: browsers read "/\evil.com" as "//evil.com".
+  return back(next.startsWith("/") && !next.startsWith("//") && !next.includes("\\") ? next : "/");
 }
 
 /**
