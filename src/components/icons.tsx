@@ -48,6 +48,12 @@ const PATHS = {
       <path d="M12 6v6l4 2" />
     </>
   ),
+  calendar: (
+    <>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </>
+  ),
   search: (
     <>
       <circle cx="11" cy="11" r="8" />

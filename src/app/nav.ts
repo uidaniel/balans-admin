@@ -11,6 +11,7 @@ export const NAV = [
   { href: "/payments", label: "Payments", icon: "card", group: "Business" },
   { href: "/waitlist", label: "Waitlist", icon: "clock", group: "Growth" },
   { href: "/broadcast", label: "Broadcast", icon: "send", group: "Growth" },
+  { href: "/content", label: "Content", icon: "calendar", group: "Growth" },
   { href: "/health", label: "Health", icon: "activity", group: "System" },
 ] as const satisfies readonly { href: string; label: string; icon: IconName; group: string }[];
 
