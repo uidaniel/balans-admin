@@ -1,5 +1,5 @@
 import { CAMPAIGN, DEFAULT_TEST_PHONE, loadBroadcastPage, type BroadcastRow } from "@/lib/broadcast";
-import { Card, Empty, Pill, Stat, table, type PillTone } from "@/components/ui";
+import { Card, Empty, Notice, Pill, Stat, btn, field, table, type PillTone } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { Failed, gate, Shell } from "../shell";
 import { sendTest, sendToEveryone } from "./actions";
@@ -42,24 +42,21 @@ export default async function BroadcastPage({
       <RefreshWhile active={busy} />
 
       {params.error && (
-        <div className="mb-4 flex gap-3 rounded-2xl border border-clay/20 bg-clay/[0.05] px-5 py-3.5 text-sm text-clay">
-          <Icon name="alert" className="mt-0.5 size-4 shrink-0" />
-          <p>{params.error}</p>
-        </div>
+        <Notice tone="clay" role="alert" className="mb-4">
+          {params.error}
+        </Notice>
       )}
       {params.queued && !params.error && (
-        <div className="mb-4 flex gap-3 rounded-2xl border border-moss/20 bg-moss/[0.06] px-5 py-3.5 text-sm text-moss">
-          <Icon name="check" className="mt-0.5 size-4 shrink-0" />
-          <p>
-            {params.queued === "test"
-              ? "Test queued. It goes out within about 15 seconds — watch your phone and the history below."
-              : "Queued for the whole waitlist. Progress shows below and updates by itself."}
-          </p>
-        </div>
+        <Notice tone="moss" role="status" className="mb-4">
+          {params.queued === "test"
+            ? "Test queued. It goes out within about 15 seconds — watch your phone and the history below."
+            : "Queued for the whole waitlist. Progress shows below and updates by itself."}
+        </Notice>
       )}
 
-      <div className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <Stat
+          className="col-span-2 xl:col-span-1"
           icon="shield"
           label="WhatsApp template"
           value={page.templateStatus ? title(page.templateStatus) : "Unknown"}
@@ -72,32 +69,32 @@ export default async function BroadcastPage({
         />
         {page.audience.data ? (
           <>
-            <Stat icon="users" label="On the waitlist" value={fmt(page.audience.data.people)} note="Not counting unsubscribed" />
+            <Stat className="col-span-2 xl:col-span-1" icon="users" label="On the waitlist" value={fmt(page.audience.data.people)} note="Not counting unsubscribed" />
             <Stat icon="message" label="Will get WhatsApp" value={fmt(page.audience.data.phones)} />
             <Stat icon="mail" label="Will get email" value={fmt(page.audience.data.emails)} />
           </>
         ) : (
-          <div className="sm:col-span-1 xl:col-span-3">
+          <div className="col-span-2 xl:col-span-3">
             <Failed what="the waitlist" error={page.audience.error ?? "unknown"} />
           </div>
         )}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-        <Card title="What they will see" sub="Exactly as it will arrive" icon="message">
+        <Card title="What they will see" sub="Exactly as it will arrive">
           {page.campaign ? (
             <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
               <WhatsAppPreview c={page.campaign} />
               <div>
-                <p className="mb-2 text-xs font-medium tracking-wide text-ink/45 uppercase">Email</p>
+                <p className="mb-2 text-[0.82rem] font-medium text-ink/60">Email</p>
                 <p className="mb-2 text-sm">
-                  <span className="text-ink/50">Subject:</span> <strong>{page.campaign.email.subject}</strong>
+                  <span className="text-ink/50">Subject:</span> <strong className="font-medium">{page.campaign.email.subject}</strong>
                 </p>
                 <iframe
                   title="Email preview"
                   srcDoc={page.campaign.email.html}
                   sandbox=""
-                  className="h-[560px] w-full rounded-xl border border-line bg-[#f6f1e7]"
+                  className="h-[520px] w-full rounded-2xl border border-line bg-cream sm:h-[560px]"
                 />
               </div>
             </div>
@@ -109,27 +106,24 @@ export default async function BroadcastPage({
         </Card>
 
         <div className="flex flex-col gap-4">
-          <Card title="Send a test" sub="One person, through the real sender" icon="send">
+          <Card title="Send a test" sub="One person, through the real sender">
             <form action={sendTest} className="space-y-3">
               <Field label="WhatsApp number" name="phone" defaultValue={DEFAULT_TEST_PHONE} placeholder="0810 740 8438" />
               <Field label="Email (optional)" name="email" type="email" placeholder="you@example.com" />
               {!approved && (
-                <p className="rounded-xl bg-marigold/10 px-3.5 py-2.5 text-xs leading-relaxed text-[#7a5300]">
+                <p className="rounded-2xl bg-[#fdf3dc] px-3.5 py-2.5 text-xs leading-relaxed text-[#6b4800]">
                   Until Meta approves the template, WhatsApp only lets Balans message a number that wrote to it in the last
                   24 hours. Send “hi” to Balans from this phone first, then press Send test.
                 </p>
               )}
-              <button
-                type="submit"
-                className="inline-flex h-10 items-center gap-2 rounded-xl bg-ink px-4 text-sm font-medium text-cream transition-colors hover:bg-ink-3"
-              >
-                <Icon name="send" className="size-4" />
+              <button type="submit" className={btn.primary}>
+                <Icon name="send" className="size-4 text-marigold" />
                 Send test
               </button>
             </form>
           </Card>
 
-          <Card title="Send to the waitlist" sub="Oldest sign-ups first, in as many batches as you like" icon="zap">
+          <Card title="Send to the waitlist" sub="Oldest sign-ups first, in as many batches as you like">
             {alreadySent ? (
               <p className="text-sm leading-relaxed text-ink/65">
                 Everyone on the waitlist has had this — see the history below. Nobody is ever sent it twice.
@@ -145,7 +139,7 @@ export default async function BroadcastPage({
                   it again. This cannot be undone.
                 </p>
                 <label className="block">
-                  <span className="text-xs font-medium text-ink/55">How many (blank = everyone still waiting)</span>
+                  <span className="text-[0.82rem] font-medium text-ink/60">How many (blank = everyone still waiting)</span>
                   <input
                     name="count"
                     type="number"
@@ -153,23 +147,19 @@ export default async function BroadcastPage({
                     inputMode="numeric"
                     placeholder={page.unsent === null ? "All" : `All ${fmt(page.unsent)}`}
                     disabled={!approved}
-                    className="mt-1 h-10 w-full rounded-xl border border-line bg-white px-3 text-sm outline-none focus:border-ink/40 focus:ring-4 focus:ring-ink/5 disabled:bg-canvas"
+                    className={`mt-1.5 ${field}`}
                   />
                 </label>
                 <label className="block">
-                  <span className="text-xs font-medium text-ink/55">Type SEND to confirm</span>
+                  <span className="text-[0.82rem] font-medium text-ink/60">Type SEND to confirm</span>
                   <input
                     name="confirm"
                     autoComplete="off"
                     disabled={!approved}
-                    className="mt-1 h-10 w-full rounded-xl border border-line bg-white px-3 font-mono text-sm tracking-widest uppercase outline-none focus:border-ink/40 focus:ring-4 focus:ring-ink/5 disabled:bg-canvas"
+                    className={`mt-1.5 font-mono tracking-widest uppercase ${field}`}
                   />
                 </label>
-                <button
-                  type="submit"
-                  disabled={!approved}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-marigold px-4 text-sm font-semibold text-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                >
+                <button type="submit" disabled={!approved} className={btn.accent}>
                   <Icon name="zap" className="size-4" />
                   Send
                 </button>
@@ -183,9 +173,9 @@ export default async function BroadcastPage({
       </div>
 
       <div className="mt-4">
-        <Card title="History" sub="Tests and sends, newest first" icon="clock" flush>
+        <Card title="History" sub="Tests and sends, newest first" flush>
           {page.history.error ? (
-            <div className="px-5 pb-5">
+            <div className="px-4 pb-4 sm:px-5 sm:pb-5">
               <Failed what="broadcasts" error={page.history.error} />
             </div>
           ) : history.length === 0 ? (
@@ -193,7 +183,13 @@ export default async function BroadcastPage({
               <Empty icon="send">Nothing sent yet.</Empty>
             </div>
           ) : (
-            <div className={table.wrap}>
+            <>
+            <ul className={`${table.list} lg:hidden`}>
+              {history.map((b) => (
+                <HistoryCard key={b.id} b={b} />
+              ))}
+            </ul>
+            <div className={`${table.wrap} hidden lg:block`}>
               <table className={`${table.table} min-w-240`}>
                 <thead className={table.head}>
                   <tr>
@@ -213,6 +209,7 @@ export default async function BroadcastPage({
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </Card>
       </div>
@@ -220,14 +217,60 @@ export default async function BroadcastPage({
   );
 }
 
+const TONE: Record<BroadcastRow["status"], PillTone> = {
+  queued: "marigold",
+  sending: "marigold",
+  done: "moss",
+  failed: "clay",
+  cancelled: "neutral",
+};
+
+/** A send, as a card for the phone list. */
+function HistoryCard({ b }: { b: BroadcastRow }) {
+  const problem = b.note ?? b.wa_error ?? b.email_error;
+  return (
+    <li className={table.item}>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Pill tone={b.kind === "live" ? "ink" : "neutral"} dot={false}>
+          {b.kind === "live" ? "Waitlist" : "Test"}
+        </Pill>
+        <Pill tone={TONE[b.status]}>{title(b.status)}</Pill>
+        <span className="ml-auto text-xs text-ink/45 tabular-nums">{when(b.created_at)}</span>
+      </div>
+      <div className="mt-2 text-sm">
+        {b.kind === "test" ? (
+          <>
+            {b.first_phone && <p className="font-mono text-[0.82rem]">{b.first_phone}</p>}
+            {b.first_email && <p className="truncate text-xs text-ink/55">{b.first_email}</p>}
+          </>
+        ) : (
+          <p className="font-medium tabular-nums">{fmt(b.recipients)} people</p>
+        )}
+      </div>
+      <dl className="mt-2.5 grid grid-cols-2 gap-2 rounded-2xl bg-paper px-3 py-2.5 text-xs tabular-nums">
+        <div className="min-w-0">
+          <dt className="text-ink/45">WhatsApp</dt>
+          <dd className="mt-0.5">
+            <Counts sent={b.wa_sent} failed={b.wa_failed} pending={b.wa_pending} />
+            {b.wa_via === "preview" && <p className="text-ink/45">as a preview</p>}
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-ink/45">Email</dt>
+          <dd className="mt-0.5">
+            <Counts sent={b.email_sent} failed={b.email_failed} pending={b.email_pending} />
+          </dd>
+        </div>
+      </dl>
+      <p className={`mt-2 text-xs leading-relaxed break-words ${problem ? "text-clay" : "text-ink/45"}`}>
+        {problem ?? (b.status === "done" ? "All delivered to WhatsApp and the mail server." : "—")}
+      </p>
+      {b.created_by && <p className="mt-1 text-[0.7rem] text-ink/40">By {b.created_by}</p>}
+    </li>
+  );
+}
+
 function HistoryRow({ b }: { b: BroadcastRow }) {
-  const tone: Record<BroadcastRow["status"], PillTone> = {
-    queued: "marigold",
-    sending: "marigold",
-    done: "moss",
-    failed: "clay",
-    cancelled: "neutral",
-  };
   const problem = b.note ?? b.wa_error ?? b.email_error;
   return (
     <tr className={table.row}>
@@ -241,7 +284,7 @@ function HistoryRow({ b }: { b: BroadcastRow }) {
         </Pill>
       </td>
       <td className={table.td}>
-        <Pill tone={tone[b.status]}>{title(b.status)}</Pill>
+        <Pill tone={TONE[b.status]}>{title(b.status)}</Pill>
       </td>
       <td className={`${table.td} text-xs`}>
         {b.kind === "test" ? (
@@ -282,8 +325,8 @@ function Counts({ sent, failed, pending }: { sent: number; failed: number; pendi
 function WhatsAppPreview({ c }: { c: NonNullable<Awaited<ReturnType<typeof loadBroadcastPage>>["campaign"]> }) {
   return (
     <div>
-      <p className="mb-2 text-xs font-medium tracking-wide text-ink/45 uppercase">WhatsApp</p>
-      <div className="rounded-2xl bg-[#efe7dd] p-4 sm:p-5">
+      <p className="mb-2 text-[0.82rem] font-medium text-ink/60">WhatsApp</p>
+      <div className="rounded-[20px] bg-[#efe7dd] p-3 sm:p-5">
         <div className="max-w-[340px] overflow-hidden rounded-xl rounded-tl-sm bg-white shadow-[0_1px_1px_rgba(0,0,0,0.12)]">
           <div className="p-1">
             {/* eslint-disable-next-line @next/next/no-img-element -- the published poster, exactly as sent */}
@@ -303,7 +346,9 @@ function WhatsAppPreview({ c }: { c: NonNullable<Awaited<ReturnType<typeof loadB
         </div>
         <p className="mt-3 text-xs text-ink/45">Button opens: {c.whatsapp.opens}</p>
       </div>
-      <p className="mt-2 text-xs text-ink/45">Template: {CAMPAIGN}</p>
+      <p className="mt-2 text-xs text-ink/45">
+        Template: <span className="font-mono">{CAMPAIGN}</span>
+      </p>
     </div>
   );
 }
@@ -329,13 +374,13 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium text-ink/55">{label}</span>
+      <span className="text-[0.82rem] font-medium text-ink/60">{label}</span>
       <input
         name={name}
         type={type}
         defaultValue={defaultValue}
         placeholder={placeholder}
-        className="mt-1 h-10 w-full rounded-xl border border-line bg-white px-3 text-sm outline-none placeholder:text-ink/35 focus:border-ink/40 focus:ring-4 focus:ring-ink/5"
+        className={`mt-1.5 ${field}`}
       />
     </label>
   );

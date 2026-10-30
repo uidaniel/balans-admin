@@ -34,6 +34,14 @@ then somebody with database access runs:
 
 Signing in again then works.
 
+Simpler, since 30 October 2026: invite the address first, and the first
+magic-link sign-in lets them straight in (API migration 0052):
+
+    INSERT INTO admin_invites (email, role) VALUES ('them@example.com', 'admin');
+
+The address must be lower case. On that first sign-in the invite becomes their
+`admin_allowlist` row and is marked claimed.
+
 ### The redirect allowlist — the bit that catches everyone
 
 Supabase only honours a `redirectTo` that appears in its own allowlist. Ask

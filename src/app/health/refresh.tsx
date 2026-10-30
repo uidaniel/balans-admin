@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { btn } from "@/components/ui";
 
 /** Reloads the page's data every 30 seconds while it is open, and on a tap. */
 export function Refresh() {
@@ -11,11 +12,7 @@ export function Refresh() {
     return () => clearInterval(t);
   }, [router]);
   return (
-    <button
-      type="button"
-      onClick={() => router.refresh()}
-      className="h-9 rounded-xl border border-line bg-white px-3 text-sm font-medium text-ink/70 hover:bg-canvas hover:text-ink"
-    >
+    <button type="button" onClick={() => router.refresh()} className={btn.secondary}>
       Refresh
     </button>
   );

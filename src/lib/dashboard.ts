@@ -267,6 +267,75 @@ export async function loadInsights(): Promise<Loaded<Insights>> {
   return { data: out as Insights, error: null };
 }
 
+/*
+ * What WhatsApp costs, as Meta reports it (API migration 0051).
+ *
+ * Two sources, both Meta's own. Spend is what Meta charged, synced daily from
+ * its pricing analytics; it lags a day, so `spend_reported_through` says how
+ * far it goes. Counts are every message Meta priced, from its delivery
+ * reports: billable or free, by category. Nothing here is an estimate, and
+ * spend stays null rather than zero when Meta has not reported it.
+ */
+export type WhatsAppSlice = { category: string; pricing_type: string; messages: number; billable?: number; cost?: number; cost_kobo?: number | null };
+export type WhatsAppDay = { day: string; cost_kobo: number | null; reported: boolean; billable: number };
+export type WhatsApp = {
+  spend_30d_kobo: number | null;
+  spend_30d: number | null;
+  spend_currency: string | null;
+  spend_unconverted_days: number;
+  spend_reported_through: string | null;
+  spend_synced_at: string | null;
+  reported_messages_30d: number;
+  priced_messages_30d: number;
+  billable_messages_30d: number;
+  free_messages_30d: number;
+  sent_messages_30d: number;
+  priced_by_category: WhatsAppSlice[];
+  spend_by_category: WhatsAppSlice[];
+  daily: WhatsAppDay[];
+};
+
+const maybe = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number(v));
+
+export async function loadWhatsApp(): Promise<Loaded<WhatsApp>> {
+  const { data, error } = await serviceClient().from("admin_whatsapp").select("*").single();
+  if (error || !data) return { data: null, error: error?.message ?? "no row" };
+  const r = data as Record<string, unknown>;
+  const slices = (v: unknown): WhatsAppSlice[] =>
+    ((v as Record<string, unknown>[] | null) ?? []).map((s) => ({
+      category: String(s.category ?? "unknown"),
+      pricing_type: String(s.pricing_type ?? "unknown"),
+      messages: n(s.messages),
+      ...(s.billable === undefined ? {} : { billable: n(s.billable) }),
+      ...(s.cost === undefined ? {} : { cost: n(s.cost) }),
+      ...(s.cost_kobo === undefined ? {} : { cost_kobo: maybe(s.cost_kobo) }),
+    }));
+  return {
+    data: {
+      spend_30d_kobo: maybe(r.spend_30d_kobo),
+      spend_30d: maybe(r.spend_30d),
+      spend_currency: (r.spend_currency as string | null) ?? null,
+      spend_unconverted_days: n(r.spend_unconverted_days),
+      spend_reported_through: (r.spend_reported_through as string | null) ?? null,
+      spend_synced_at: (r.spend_synced_at as string | null) ?? null,
+      reported_messages_30d: n(r.reported_messages_30d),
+      priced_messages_30d: n(r.priced_messages_30d),
+      billable_messages_30d: n(r.billable_messages_30d),
+      free_messages_30d: n(r.free_messages_30d),
+      sent_messages_30d: n(r.sent_messages_30d),
+      priced_by_category: slices(r.priced_by_category),
+      spend_by_category: slices(r.spend_by_category),
+      daily: ((r.daily as Record<string, unknown>[] | null) ?? []).map((d) => ({
+        day: String(d.day),
+        cost_kobo: maybe(d.cost_kobo),
+        reported: Boolean(d.reported),
+        billable: n(d.billable),
+      })),
+    },
+    error: null,
+  };
+}
+
 /** Paystack's page where subaccounts are ticked and verified. */
 export const PAYSTACK_SUBACCOUNTS_URL = "https://dashboard.paystack.com/#/subaccounts";
 

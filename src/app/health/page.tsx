@@ -1,5 +1,5 @@
 import { serviceClient } from "@/lib/supabase";
-import { Card, Empty, Pill, Stat, table, type PillTone } from "@/components/ui";
+import { Card, Empty, Notice, Pill, Stat, table, type PillTone } from "@/components/ui";
 import { Failed, gate, Shell } from "../shell";
 import { Refresh } from "./refresh";
 
@@ -42,13 +42,20 @@ const ago = (iso: string | null, now: number): string => {
   return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`;
 };
 
+/**
+ * The time this request is rendered at. The page is force-dynamic and server
+ * rendered, so reading the clock once per request is the point; kept outside
+ * the component so the render itself stays pure.
+ */
+const requestTime = () => Date.now();
+
 export default async function HealthPage() {
   const g = await gate();
   if (!g.staff) return g.stop;
 
   const { data, error } = await serviceClient().from("service_health").select("*").order("name");
   const rows = (data ?? []) as Row[];
-  const now = Date.now();
+  const now = requestTime();
   const newest = rows.reduce((t, r) => Math.max(t, new Date(r.checked_at).getTime()), 0);
   const stale = rows.length > 0 && now - newest > STALE_MS;
   const down = rows.filter((r) => r.status === "down").length;
@@ -71,16 +78,19 @@ export default async function HealthPage() {
       ) : (
         <>
           {stale && (
-            <div className="mb-4 rounded-2xl border border-clay/30 bg-clay/10 px-5 py-4 text-sm text-clay">
-              <p className="font-semibold">The API has not reported for {ago(new Date(newest).toISOString(), now)}.</p>
-              <p className="mt-0.5 text-clay/80">
-                It may be down or restarting. The rows below are its last answers, not current ones.
-              </p>
-            </div>
+            <Notice
+              tone="clay"
+              role="alert"
+              className="mb-4"
+              title={`The API has not reported for ${ago(new Date(newest).toISOString(), now)}.`}
+            >
+              It may be down or restarting. The rows below are its last answers, not current ones.
+            </Notice>
           )}
 
-          <div className="mb-4 grid gap-4 sm:grid-cols-3">
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
             <Stat
+              className="col-span-2 sm:col-span-1"
               icon="activity"
               label="API"
               value={stale ? "Not reporting" : "Reporting"}
@@ -92,7 +102,27 @@ export default async function HealthPage() {
           </div>
 
           <Card flush>
-            <div className={table.wrap}>
+            {/* Phone: one row per service, status on the right. */}
+            <ul className="divide-y divide-line/80 md:hidden">
+              {rows.map((r) => {
+                const st = TONE[r.status];
+                return (
+                  <li key={r.name} className={table.item}>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate font-medium">{r.name}</p>
+                      <Pill tone={stale ? "neutral" : st.tone}>{st.label}</Pill>
+                    </div>
+                    {r.detail && <p className="mt-1 text-[0.82rem] leading-snug break-words text-ink/65">{r.detail}</p>}
+                    <p className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-ink/45 tabular-nums">
+                      <span>{r.latency_ms === null ? "—" : `${r.latency_ms.toLocaleString("en-GB")} ms`}</span>
+                      <span>Checked {ago(r.checked_at, now)}</span>
+                      {r.status !== "ok" && <span>Last working {ago(r.last_ok_at, now)}</span>}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className={`${table.wrap} hidden md:block`}>
               <table className={`${table.table} min-w-180`}>
                 <thead className={table.head}>
                   <tr>

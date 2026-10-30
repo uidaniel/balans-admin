@@ -1,6 +1,6 @@
 import { naira, shortDate } from "@/lib/money";
 import { loadAccounts, loadUnverifiedSubaccounts, type AccountSort } from "@/lib/dashboard";
-import { Avatar, Card, Empty, Pill, Segmented, Stat, table } from "@/components/ui";
+import { Avatar, Card, Empty, Notice, Pill, Segmented, Stat, btn, fieldWithIcon, statGrid, table } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { serviceClient } from "@/lib/supabase";
 import { Failed, gate, Shell } from "../shell";
@@ -66,18 +66,13 @@ export default async function UsersPage({
       sub="Every account, with what they have billed and been paid."
     >
       {(params.plan_ok || params.plan_error) && (
-        <div
-          className={`mb-4 flex gap-3 rounded-2xl border px-5 py-3.5 text-sm ${
-            params.plan_error ? "border-clay/20 bg-clay/[0.05] text-clay" : "border-moss/20 bg-moss/[0.06] text-moss"
-          }`}
-        >
-          <Icon name={params.plan_error ? "alert" : "check"} className="mt-0.5 size-4 shrink-0" />
-          <p>{params.plan_error ?? params.plan_ok}</p>
-        </div>
+        <Notice tone={params.plan_error ? "clay" : "moss"} role="status" className="mb-4">
+          {params.plan_error ?? params.plan_ok}
+        </Notice>
       )}
 
       {accounts.data && (
-        <div className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className={`mb-4 ${statGrid}`}>
           <Stat
             icon="users"
             label={q ? "Matching" : "Accounts"}
@@ -97,23 +92,20 @@ export default async function UsersPage({
 
       <Card flush>
         <div className="flex flex-col gap-3 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
-          <form method="get" className="flex w-full max-w-md gap-2">
+          <form method="get" className="flex w-full gap-2 lg:max-w-md">
             <input type="hidden" name="sort" value={sort} />
             <label className="relative flex-1">
               <span className="sr-only">Search users</span>
-              <Icon name="search" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink/40" />
+              <Icon name="search" className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink/40" />
               <input
                 type="search"
                 name="q"
                 defaultValue={q}
                 placeholder="Business, phone or email"
-                className="h-10 w-full rounded-xl border border-line bg-white pr-3 pl-9 text-sm outline-none placeholder:text-ink/40 focus:border-ink/40 focus:ring-4 focus:ring-ink/5"
+                className={fieldWithIcon}
               />
             </label>
-            <button
-              type="submit"
-              className="h-10 rounded-xl bg-ink px-4 text-sm font-medium text-cream transition-colors hover:bg-ink-3"
-            >
+            <button type="submit" className={btn.primary}>
               Search
             </button>
           </form>
@@ -121,7 +113,7 @@ export default async function UsersPage({
         </div>
 
         {accounts.error ? (
-          <div className="px-5 pb-5">
+          <div className="px-4 pb-4 sm:px-5 sm:pb-5">
             <Failed what="users" error={accounts.error} />
           </div>
         ) : rows.length === 0 ? (
@@ -129,7 +121,75 @@ export default async function UsersPage({
             <Empty icon="users">{q ? `Nobody matches “${q}”.` : "No users yet."}</Empty>
           </div>
         ) : (
-          <div className={table.wrap}>
+          <>
+          {/* Phone and tablet: one card per account, the figures that matter first. */}
+          <ul className={`${table.list} lg:hidden`}>
+            {rows.map((a) => {
+              const name = a.business_name ?? `+${a.wa_phone}`;
+              const flags = !a.onboarded_at || toVerify.has(a.id) || a.status !== "active";
+              return (
+                <li key={a.id} className={`${table.item} flex gap-3`}>
+                  <Avatar name={name} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className={`truncate font-medium ${a.business_name ? "" : "text-ink/45"}`}>
+                        {a.business_name ?? "Not set up"}
+                      </p>
+                      <p className="shrink-0 text-sm font-medium tabular-nums">{naira(a.invoiced_kobo)}</p>
+                    </div>
+                    <div className="mt-0.5 flex items-baseline justify-between gap-3 text-xs text-ink/50">
+                      <p className="truncate font-mono">+{a.wa_phone}</p>
+                      <p className="shrink-0 tabular-nums">{naira(a.collected_kobo)} collected</p>
+                    </div>
+                    {a.email && (
+                      <p className="mt-0.5 truncate text-xs text-ink/50">
+                        {a.email}
+                        {!a.email_verified && <span className="text-clay"> · unverified</span>}
+                      </p>
+                    )}
+                    {flags && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {!a.onboarded_at && <Pill tone="marigold">Setup unfinished</Pill>}
+                        {toVerify.has(a.id) && <Pill tone="clay">Verify on Paystack</Pill>}
+                        {a.status !== "active" && <Pill tone="clay">{a.status}</Pill>}
+                      </div>
+                    )}
+                    <dl className="mt-3 grid grid-cols-3 gap-2 rounded-2xl bg-paper px-3 py-2.5 text-xs tabular-nums">
+                      <div className="min-w-0">
+                        <dt className="text-ink/45">Invoices</dt>
+                        <dd className="mt-0.5 font-medium">
+                          {a.invoices} <span className="font-normal text-moss">· {a.invoices_paid} paid</span>
+                        </dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-ink/45">Unpaid</dt>
+                        <dd className={`mt-0.5 truncate font-medium ${a.outstanding_kobo > 0 ? "text-clay" : "text-ink/40"}`}>
+                          {naira(a.outstanding_kobo)}
+                        </dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-ink/45">Last active</dt>
+                        <dd className="mt-0.5 truncate font-medium">{a.last_active_at ? shortDate(a.last_active_at) : "—"}</dd>
+                      </div>
+                    </dl>
+                    <div className="mt-3">
+                      <PlanCell
+                        userId={a.id}
+                        plan={a.plan === "pro" ? "pro" : "free"}
+                        until={proUntil.get(a.id) ?? null}
+                        canChange={canChange}
+                        back={here}
+                        inline
+                      />
+                    </div>
+                    <p className="mt-2 text-[0.7rem] text-ink/40">Joined {shortDate(a.created_at)}</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className={`${table.wrap} hidden lg:block`}>
             <table className={`${table.table} min-w-280`}>
               <thead className={table.head}>
                 <tr>
@@ -192,7 +252,7 @@ export default async function UsersPage({
                           <span className="text-moss">{a.invoices_paid} paid</span> · {a.invoices_unpaid} unpaid
                         </p>
                       </td>
-                      <td className={`${table.td} text-right font-semibold`}>{naira(a.invoiced_kobo)}</td>
+                      <td className={`${table.td} text-right font-medium`}>{naira(a.invoiced_kobo)}</td>
                       <td className={`${table.td} text-right`}>{naira(a.collected_kobo)}</td>
                       <td className={`${table.td} text-right ${a.outstanding_kobo > 0 ? "font-medium text-clay" : "text-ink/40"}`}>
                         {naira(a.outstanding_kobo)}
@@ -203,6 +263,7 @@ export default async function UsersPage({
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
     </Shell>
@@ -219,26 +280,39 @@ function PlanCell({
   until,
   canChange,
   back,
+  inline = false,
 }: {
   userId: string;
   plan: "pro" | "free";
   until: string | null;
   canChange: boolean;
   back: string;
+  /** On a phone: plan, end date and the menu's toggle along one line. */
+  inline?: boolean;
 }) {
   const pro = plan === "pro";
   return (
-    <div className="flex flex-col items-start gap-1">
+    <div className={inline ? "flex flex-wrap items-center gap-x-2.5 gap-y-1" : "flex flex-col items-start gap-1"}>
       <Pill tone={pro ? "ink" : "neutral"} dot={false}>
         {pro ? "Pro" : "Free"}
       </Pill>
       {pro && <p className="text-xs whitespace-nowrap text-ink/45">{until ? `until ${shortDate(until)}` : "no end date"}</p>}
       {canChange && (
-        <details className="group relative">
-          <summary className="cursor-pointer list-none text-xs font-medium text-ink/55 hover:text-ink [&::-webkit-details-marker]:hidden">
+        <details className={`group relative ${inline ? "ml-auto [&[open]]:basis-full" : ""}`}>
+          <summary
+            className={`cursor-pointer list-none font-medium [&::-webkit-details-marker]:hidden ${
+              inline
+                ? "inline-flex h-10 items-center rounded-full border border-line bg-white px-3.5 text-xs text-ink/70 hover:text-ink"
+                : "inline-flex h-7 items-center text-xs text-ink/55 underline decoration-ink/20 underline-offset-4 hover:text-ink"
+            }`}
+          >
             {pro ? "Change" : "Promote"}
           </summary>
-          <div className="mt-2 w-60 rounded-xl border border-line bg-white p-3 shadow-[0_8px_24px_rgba(16,35,28,0.12)]">
+          <div
+            className={`mt-2 rounded-[18px] border border-line bg-white p-3 shadow-[0_12px_32px_-12px_rgba(16,35,28,0.25)] ${
+              inline ? "w-full" : "w-64"
+            }`}
+          >
             <form action={setPlan} className="space-y-2">
               <input type="hidden" name="user" value={userId} />
               <input type="hidden" name="to" value="pro" />
@@ -248,7 +322,7 @@ function PlanCell({
                 <select
                   name="months"
                   defaultValue="1"
-                  className="mt-1 h-9 w-full rounded-lg border border-line bg-white px-2 text-sm text-ink outline-none focus:border-ink/40"
+                  className="mt-1 h-10 w-full rounded-xl border border-line bg-white px-2.5 text-base text-ink outline-none focus:border-ink/40 focus:ring-4 focus:ring-ink/[0.06] focus-visible:outline-none sm:text-sm"
                 >
                   <option value="1">1 month from today</option>
                   <option value="3">3 months from today</option>
@@ -257,10 +331,7 @@ function PlanCell({
                   <option value="0">No end date</option>
                 </select>
               </label>
-              <button
-                type="submit"
-                className="h-9 w-full rounded-lg bg-ink text-sm font-medium text-cream transition-colors hover:bg-ink-3"
-              >
+              <button type="submit" className={`${btn.primary} w-full`}>
                 {pro ? "Update Pro" : "Promote to Pro"}
               </button>
             </form>
@@ -269,10 +340,7 @@ function PlanCell({
                 <input type="hidden" name="user" value={userId} />
                 <input type="hidden" name="to" value="free" />
                 <input type="hidden" name="back" value={back} />
-                <button
-                  type="submit"
-                  className="h-9 w-full rounded-lg text-sm font-medium text-clay transition-colors hover:bg-clay/[0.07]"
-                >
+                <button type="submit" className={`${btn.ghostDanger} w-full`}>
                   Demote to Free
                 </button>
                 <p className="mt-1 text-[0.7rem] leading-snug text-ink/45">

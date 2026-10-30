@@ -56,37 +56,36 @@ export default function AdminLogin() {
   }
 
   return (
-    <main className="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
-      {/* Brand panel, from lg up. */}
-      <section className="relative hidden overflow-hidden bg-ink p-12 text-cream lg:flex lg:flex-col lg:justify-between">
-        <div aria-hidden className="pointer-events-none absolute -top-32 -right-24 size-[28rem] rounded-full bg-marigold/20 blur-3xl" />
-        <div aria-hidden className="pointer-events-none absolute -bottom-40 -left-20 size-[26rem] rounded-full bg-moss/30 blur-3xl" />
-        <Logo tone="dark" className="relative h-9 w-auto self-start" />
-        <div className="relative max-w-md">
-          <p className="font-display text-[2.4rem] leading-[1.1] font-semibold tracking-tight">
+    <main className="flex min-h-dvh flex-col lg:grid lg:grid-cols-[1.1fr_1fr]">
+      {/* Brand panel: a band across the top of a phone, the left half from lg up. */}
+      <section className="on-night relative isolate overflow-hidden bg-night px-5 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-16 text-cream sm:px-8 lg:flex lg:flex-col lg:justify-between lg:p-12">
+        <div aria-hidden className="pointer-events-none absolute -top-32 -right-24 -z-10 size-[28rem] rounded-full bg-marigold/20 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-40 -left-20 -z-10 size-[26rem] rounded-full bg-moss/25 blur-3xl" />
+        <div aria-hidden className="noise pointer-events-none absolute inset-0 -z-10" />
+        <Logo tone="dark" className="h-8 w-auto self-start lg:h-9" />
+        <div className="mt-10 max-w-md lg:mt-0">
+          <p className="font-display text-[2rem] leading-[1.08] font-light tracking-[-0.035em] lg:text-[3rem]">
             The whole business, <span className="text-marigold">on one page.</span>
           </p>
-          <p className="mt-4 text-cream/60">
+          <p className="mt-4 hidden leading-relaxed text-cream/60 sm:block">
             Money collected, who is signing up, what the bot is sending, and what needs a look. Live from the database.
           </p>
         </div>
-        <p className="relative text-xs text-cream/40">Staff only · access is checked on every page</p>
+        <p className="hidden text-xs text-cream/40 lg:block">Staff only · access is checked on every page</p>
       </section>
 
-      <section className="grid place-items-center px-4 py-12">
+      <section className="relative -mt-8 flex flex-1 justify-center rounded-t-[28px] bg-canvas px-4 pt-8 pb-12 sm:px-8 lg:mt-0 lg:items-center lg:rounded-none lg:py-12">
         <div className="w-full max-w-sm">
-          <Logo tone="light" className="h-8 w-auto lg:hidden" />
-
-          <h1 className="mt-8 font-display text-[1.75rem] font-semibold tracking-tight lg:mt-0">Sign in to admin</h1>
+          <h1 className="font-display text-[1.75rem] leading-tight font-light tracking-[-0.03em] sm:text-[2rem]">Sign in to admin</h1>
           <p className="mt-1.5 text-[0.95rem] text-ink/55">We will email you a link. No password needed.</p>
 
           {state.status === "sent" ? (
-            <div role="status" className="animate-rise mt-8 flex gap-3 rounded-2xl border border-line bg-white p-5">
+            <div role="status" className="animate-rise mt-8 flex gap-3 rounded-[22px] border border-line bg-white p-5 shadow-card">
               <span className="grid size-10 shrink-0 place-items-center rounded-full bg-moss/10 text-moss">
                 <Icon name="mail" className="size-[1.1rem]" />
               </span>
               <div>
-                <p className="font-semibold">Check your email.</p>
+                <p className="font-medium">Check your email.</p>
                 <p className="mt-1 text-sm leading-relaxed text-ink/60">We sent a link that signs you in. It lasts an hour.</p>
               </div>
             </div>
@@ -96,7 +95,7 @@ export default function AdminLogin() {
                 Work email
               </label>
               <div className="relative mt-1.5">
-                <Icon name="mail" className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink/40" />
+                <Icon name="mail" className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-ink/40" />
                 <input
                   id="email"
                   name="email"
@@ -104,13 +103,13 @@ export default function AdminLogin() {
                   autoComplete="email"
                   required
                   placeholder="you@balans.ng"
-                  className="h-12 w-full rounded-xl border border-line bg-white pr-4 pl-10 text-base text-ink outline-none placeholder:text-ink/40 focus:border-ink/40 focus:ring-4 focus:ring-ink/5"
+                  className="h-12 w-full rounded-full border border-line bg-white pr-4 pl-11 text-base text-ink outline-none placeholder:text-ink/40 focus:border-ink/40 focus:ring-4 focus:ring-ink/[0.06] focus-visible:outline-none"
                 />
               </div>
               <button
                 type="submit"
                 disabled={state.status === "sending"}
-                className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-ink font-medium text-cream transition-colors hover:bg-ink-3 disabled:opacity-60"
+                className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-ink font-medium text-cream transition-colors hover:bg-ink-3 disabled:opacity-60"
               >
                 {state.status === "sending" ? "Sending…" : "Email me a link"}
                 {state.status !== "sending" && <Icon name="arrowRight" className="size-4 text-marigold" />}
@@ -121,6 +120,7 @@ export default function AdminLogin() {
               </div>
             </form>
           )}
+          <p className="mt-10 text-xs text-ink/40 lg:hidden">Staff only · access is checked on every page</p>
         </div>
       </section>
     </main>

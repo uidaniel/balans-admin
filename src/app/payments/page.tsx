@@ -1,6 +1,6 @@
 import { naira } from "@/lib/money";
 import { loadPayments } from "@/lib/dashboard";
-import { Avatar, Card, Empty, Pill, Segmented, Stat, table, type PillTone } from "@/components/ui";
+import { Avatar, Card, Empty, Pill, Segmented, Stat, statGrid, table, type PillTone } from "@/components/ui";
 import { Failed, gate, Shell } from "../shell";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +52,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       sub="The ledger, newest first: what the client paid, and where each naira went."
     >
       {payments.data && (
-        <div className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className={`mb-4 ${statGrid}`}>
           <Stat icon="wallet" label="Paid by clients" value={naira(sum((p) => p.client_total_kobo))} note={`${rows.length} payments shown`} />
           <Stat icon="trending" label="To Balans" value={naira(sum((p) => p.balans_fee_kobo))} tone="moss" />
           <Stat icon="card" label="To processors" value={naira(sum((p) => p.provider_fee_kobo))} />
@@ -61,16 +61,16 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       )}
 
       <Card flush>
-        <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
+        <div className="flex flex-col gap-3 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="text-[0.95rem] font-semibold tracking-tight">All payments</h3>
-            <p className="text-xs text-ink/50">Up to 500, newest first</p>
+            <h3 className="text-[0.95rem] leading-snug font-medium tracking-[-0.01em]">All payments</h3>
+            <p className="mt-0.5 text-[0.8rem] text-ink/50">Up to 500, newest first</p>
           </div>
           <Segmented current={status} items={FILTERS.map((f) => ({ id: f.id, label: f.label, href: `/payments?status=${f.id}` }))} />
         </div>
 
         {payments.error ? (
-          <div className="px-5 pb-5">
+          <div className="px-4 pb-4 sm:px-5 sm:pb-5">
             <Failed what="payments" error={payments.error} />
           </div>
         ) : rows.length === 0 ? (
@@ -78,7 +78,55 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
             <Empty icon="receipt">No payments here.</Empty>
           </div>
         ) : (
-          <div className={table.wrap}>
+          <>
+          {/* Phone and tablet: one card per payment, with the split underneath. */}
+          <ul className={`${table.list} lg:hidden`}>
+            {rows.map((p) => {
+              const name = p.business_name ?? "—";
+              const st = STATUS[p.status] ?? { label: p.status, tone: "neutral" as const };
+              return (
+                <li key={p.id} className={`${table.item} flex gap-3`}>
+                  <Avatar name={name} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className="truncate font-medium">{name}</p>
+                      <p className="shrink-0 text-sm font-medium tabular-nums">{naira(p.client_total_kobo)}</p>
+                    </div>
+                    <div className="mt-0.5 flex items-baseline justify-between gap-3 text-xs text-ink/50">
+                      <p className="truncate">
+                        {p.client_name ?? "—"}
+                        {p.document_ref && <span className="font-mono"> · {p.document_ref}</span>}
+                      </p>
+                      <p className="shrink-0 tabular-nums">{when(p.at)}</p>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <Pill tone={st.tone}>{st.label}</Pill>
+                      <Pill tone={p.provider === "paystack" ? "marigold" : "neutral"} dot={false}>
+                        {p.provider === "paystack" ? "Card" : "Transfer"}
+                      </Pill>
+                      {p.currency !== "NGN" && <span className="text-xs font-medium text-ink/50">{p.currency}</span>}
+                    </div>
+                    <dl className="mt-3 grid grid-cols-3 gap-2 rounded-2xl bg-paper px-3 py-2.5 text-xs tabular-nums">
+                      <div className="min-w-0">
+                        <dt className="text-ink/45">Processor</dt>
+                        <dd className="mt-0.5 truncate text-ink/60">{naira(p.provider_fee_kobo)}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-ink/45">Balans</dt>
+                        <dd className="mt-0.5 truncate font-medium text-moss">{naira(p.balans_fee_kobo)}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-ink/45">To user</dt>
+                        <dd className="mt-0.5 truncate font-medium">{naira(p.to_user_kobo)}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className={`${table.wrap} hidden lg:block`}>
             <table className={`${table.table} min-w-255`}>
               <thead className={table.head}>
                 <tr>
@@ -121,7 +169,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                         <Pill tone={st.tone}>{st.label}</Pill>
                       </td>
                       <td className={`${table.td} whitespace-nowrap text-ink/60`}>{when(p.at)}</td>
-                      <td className={`${table.td} text-right font-semibold`}>{naira(p.client_total_kobo)}</td>
+                      <td className={`${table.td} text-right font-medium`}>{naira(p.client_total_kobo)}</td>
                       <td className={`${table.td} text-right text-ink/55`}>{naira(p.provider_fee_kobo)}</td>
                       <td className={`${table.td} text-right text-moss`}>{naira(p.balans_fee_kobo)}</td>
                       <td className={`${table.td} text-right`}>{naira(p.to_user_kobo)}</td>
@@ -131,6 +179,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
     </Shell>

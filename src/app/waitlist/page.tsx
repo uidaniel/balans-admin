@@ -2,7 +2,7 @@ import { serviceClient } from "@/lib/supabase";
 import { storageMode } from "@/lib/waitlist";
 import { WaitlistTable, type Row } from "../waitlist-table";
 import { Failed, gate, Shell } from "../shell";
-import { Stat } from "@/components/ui";
+import { Notice, Stat, btn, statGrid } from "@/components/ui";
 import { Icon } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
@@ -20,29 +20,26 @@ export default async function WaitlistPage() {
       title="Waitlist"
       sub="Everyone who has asked to be let in."
       actions={
-        <a
-          href="/export"
-          className="inline-flex h-10 items-center gap-2 rounded-xl bg-ink px-4 text-sm font-medium text-cream transition-colors hover:bg-ink-3"
-        >
+        <a href="/export" className={btn.primary}>
           <Icon name="download" className="size-4 text-marigold" />
           Export CSV
         </a>
       }
     >
       {storageMode() === "file" && (
-        <p className="mb-6 rounded-2xl border border-marigold/40 bg-marigold/10 px-5 py-4 text-sm leading-relaxed">
-          <strong className="font-semibold">Signups are going to a local file.</strong> SUPABASE_SERVICE_ROLE_KEY is
-          not set on this deployment, so the form is writing to
-          <code className="mx-1 rounded bg-ink/10 px-1.5 py-0.5 text-[0.85em]">.waitlist.jsonl</code>
+        <Notice tone="marigold" className="mb-6" title="Signups are going to a local file.">
+          <code className="font-mono text-[0.85em]">SUPABASE_SERVICE_ROLE_KEY</code> is not set on this deployment, so the
+          form is writing to
+          <code className="mx-1 rounded-md bg-ink/[0.07] px-1.5 py-0.5 font-mono text-[0.85em]">.waitlist.jsonl</code>
           instead of the table below. On a serverless host that write fails and the address is lost.
-        </p>
+        </Notice>
       )}
 
       {error ? (
         <Failed what="the waitlist" error={error.message} />
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className={statGrid}>
             <Stat icon="users" label="On the list" value={counts.total.toLocaleString("en-NG")} />
             <Stat icon="userPlus" label="Joined today" value={counts.today.toLocaleString("en-NG")} note="Since midnight, Lagos" />
             <Stat

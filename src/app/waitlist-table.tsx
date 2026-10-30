@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Avatar, Card, Empty, Pill, table } from "@/components/ui";
+import { Avatar, Card, Empty, Notice, Pill, btn, fieldWithIcon, table } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { removeFromWaitlist } from "./waitlist/actions";
 
@@ -96,33 +96,37 @@ export function WaitlistTable({ rows, canRemove = false }: { rows: Row[]; canRem
   return (
     <>
     {done && (
-      <div
+      <Notice
+        tone={done.ok ? "moss" : "clay"}
         role="status"
-        className={`mb-4 flex items-start gap-3 rounded-2xl border px-5 py-3.5 text-sm ${
-          done.ok ? "border-moss/20 bg-moss/[0.06] text-moss" : "border-clay/20 bg-clay/[0.05] text-clay"
-        }`}
+        className="mb-4"
+        action={
+          <button
+            type="button"
+            onClick={() => setDone(null)}
+            className="-my-2.5 -mr-2 h-10 rounded-full px-3 text-xs font-medium text-ink/60 hover:bg-ink/[0.05] hover:text-ink"
+          >
+            Dismiss
+          </button>
+        }
       >
-        <Icon name={done.ok ? "check" : "alert"} className="mt-0.5 size-4 shrink-0" />
-        <p className="flex-1">{done.text}</p>
-        <button type="button" onClick={() => setDone(null)} className="text-xs font-medium opacity-70 hover:opacity-100">
-          Dismiss
-        </button>
-      </div>
+        {done.text}
+      </Notice>
     )}
     <Card flush>
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
-        <label className="relative w-full max-w-sm">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 p-4 sm:p-5">
+        <label className="relative w-full sm:max-w-sm">
           <span className="sr-only">Search the waitlist</span>
-          <Icon name="search" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink/40" />
+          <Icon name="search" className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink/40" />
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search number, email, work, source…"
-            className="h-10 w-full rounded-xl border border-line bg-white pr-3 pl-9 text-sm outline-none placeholder:text-ink/40 focus:border-ink/40 focus:ring-4 focus:ring-ink/5"
+            className={fieldWithIcon}
           />
         </label>
-        <p className="text-sm text-ink/50 tabular-nums">
+        <p className="text-xs text-ink/50 tabular-nums sm:text-sm">
           {q ? `${shown.length} of ${rows.length}` : `${rows.length.toLocaleString("en-NG")} shown`}
         </p>
       </div>
@@ -132,7 +136,60 @@ export function WaitlistTable({ rows, canRemove = false }: { rows: Row[]; canRem
           <Empty icon="users">{rows.length === 0 ? "Nobody has signed up yet." : "Nothing matches that."}</Empty>
         </div>
       ) : (
-        <div className={table.wrap}>
+        <>
+        {/* Phone and tablet: one card per person. */}
+        <ul className={`${table.list} lg:hidden`}>
+          {shown.map((r) => (
+            <li key={r.id} className={`${table.item} flex items-start gap-3`}>
+              <Avatar name={r.work || r.email || r.phone || "?"} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-3">
+                  {r.phone ? (
+                    <a
+                      href={`https://wa.me/${r.phone.replace(/\D/g, "")}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="truncate font-medium tabular-nums hover:underline"
+                    >
+                      {phoneText(r.phone)}
+                    </a>
+                  ) : (
+                    <span className="truncate font-medium text-ink/45">No number</span>
+                  )}
+                  {r.invited_at ? <Pill tone="moss">Sent</Pill> : <Pill tone="neutral">Waiting</Pill>}
+                </div>
+                {r.email && (
+                  <a href={`mailto:${r.email}`} className="mt-0.5 block truncate text-xs text-ink/55 hover:underline">
+                    {r.email}
+                  </a>
+                )}
+                {(r.work || r.cadence || r.source) && (
+                  <p className="mt-1.5 text-[0.82rem] leading-snug text-ink/70">
+                    {[r.work, r.cadence ? (CADENCE[r.cadence] ?? r.cadence) : null, r.source].filter(Boolean).join(" · ")}
+                  </p>
+                )}
+                <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2 text-xs text-ink/45">
+                  <span className="tabular-nums">{when(r.created_at)}</span>
+                  {r.ref && <span className="font-mono">{r.ref}</span>}
+                  {r.via && <span>via {r.via}</span>}
+                </p>
+              </div>
+              {canRemove && (
+                <button
+                  type="button"
+                  onClick={() => setAsking(r)}
+                  title="Remove from the waitlist"
+                  aria-label={`Remove ${label(r)} from the waitlist`}
+                  className="-mr-2 grid size-10 shrink-0 place-items-center rounded-full text-ink/40 transition-colors hover:bg-clay/10 hover:text-clay"
+                >
+                  <Icon name="trash" className="size-4" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        <div className={`${table.wrap} hidden lg:block`}>
           <table className={`${table.table} min-w-248`}>
             <thead className={table.head}>
               <tr>
@@ -200,7 +257,7 @@ export function WaitlistTable({ rows, canRemove = false }: { rows: Row[]; canRem
                         onClick={() => setAsking(r)}
                         title="Remove from the waitlist"
                         aria-label={`Remove ${label(r)} from the waitlist`}
-                        className="grid size-8 place-items-center rounded-lg text-ink/40 transition-colors hover:bg-clay/10 hover:text-clay"
+                        className="grid size-9 place-items-center rounded-full text-ink/40 transition-colors hover:bg-clay/10 hover:text-clay"
                       >
                         <Icon name="trash" className="size-4" />
                       </button>
@@ -211,12 +268,13 @@ export function WaitlistTable({ rows, canRemove = false }: { rows: Row[]; canRem
             </tbody>
           </table>
         </div>
+        </>
       )}
     </Card>
 
     {asking && (
       <div
-        className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-4 backdrop-blur-[2px]"
+        className="fixed inset-0 z-50 grid items-end bg-night/50 p-3 backdrop-blur-[3px] sm:place-items-center sm:p-4"
         onClick={() => !pending && setAsking(null)}
       >
         <div
@@ -225,26 +283,26 @@ export function WaitlistTable({ rows, canRemove = false }: { rows: Row[]; canRem
           aria-labelledby="remove-title"
           aria-describedby="remove-body"
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-sm rounded-2xl border border-line bg-white p-6 shadow-[0_24px_60px_-20px_rgba(16,35,28,0.45)]"
+          className="animate-rise w-full rounded-[26px] border border-line bg-white p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-[0_24px_60px_-20px_rgba(16,35,28,0.45)] sm:max-w-sm sm:p-6"
         >
-          <span className="grid size-10 place-items-center rounded-xl bg-clay/10 text-clay">
+          <span className="grid size-10 place-items-center rounded-full bg-clay/10 text-clay">
             <Icon name="trash" className="size-5" />
           </span>
-          <h2 id="remove-title" className="mt-4 font-display text-lg font-semibold tracking-tight">
+          <h2 id="remove-title" className="mt-4 font-display text-[1.3rem] leading-tight font-normal tracking-[-0.02em]">
             Remove from the waitlist?
           </h2>
           <p id="remove-body" className="mt-2 text-sm leading-relaxed text-ink/65">
-            <strong className="font-semibold text-ink">{label(asking)}</strong>
+            <strong className="font-medium text-ink">{label(asking)}</strong>
             {asking.phone && asking.email ? <> ({asking.email})</> : null} will be taken off the list for good. They will
             not get the launch message. This cannot be undone.
           </p>
-          <div className="mt-6 flex justify-end gap-2">
+          <div className="mt-6 grid grid-cols-2 gap-2 sm:flex sm:justify-end">
             <button
               type="button"
               autoFocus
               disabled={pending}
               onClick={() => setAsking(null)}
-              className="h-10 rounded-xl border border-line px-4 text-sm font-medium text-ink/70 transition-colors hover:bg-canvas disabled:opacity-50"
+              className={btn.secondary}
             >
               Cancel
             </button>
@@ -252,7 +310,7 @@ export function WaitlistTable({ rows, canRemove = false }: { rows: Row[]; canRem
               type="button"
               disabled={pending}
               onClick={() => remove(asking)}
-              className="h-10 rounded-xl bg-clay px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+              className={btn.danger}
             >
               {pending ? "Removing…" : "Remove"}
             </button>

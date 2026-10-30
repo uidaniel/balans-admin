@@ -1,4 +1,5 @@
-import { naira } from "@/lib/money";
+import { naira, shortDate } from "@/lib/money";
+import type { WhatsApp } from "@/lib/dashboard";
 import { Empty, Pill, SectionTitle } from "@/components/ui";
 
 /**
@@ -40,24 +41,26 @@ function Metric({
   target,
   ok,
   hint,
+  className = "",
 }: {
   label: string;
   value: string;
   target?: string;
   ok?: boolean | null;
   hint?: string;
+  className?: string;
 }) {
   const known = ok !== null && ok !== undefined;
   return (
-    <div className="flex flex-col rounded-2xl border border-line bg-white p-5">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-medium text-ink/55">{label}</p>
+    <div className={`flex min-w-0 flex-col rounded-[20px] border border-line bg-white p-4 shadow-card sm:p-5 ${className}`}>
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <p className="text-[0.82rem] leading-snug font-medium text-ink/55">{label}</p>
         {known && (
           <Pill tone={ok ? "moss" : "clay"}>{ok ? "On track" : "Below target"}</Pill>
         )}
       </div>
       <p
-        className={`mt-2 font-display text-[1.6rem] leading-tight font-semibold tracking-tight tabular-nums ${
+        className={`mt-2.5 font-display text-[1.45rem] leading-tight font-light tracking-[-0.03em] break-words tabular-nums sm:text-[1.75rem] ${
           !known ? "" : ok ? "text-moss" : "text-clay"
         }`}
       >
@@ -65,18 +68,22 @@ function Metric({
       </p>
       {target && (
         <p className="mt-1 text-xs text-ink/45">
-          Target <span className="font-semibold text-ink/70">{target}</span>
+          Target <span className="font-medium text-ink/70">{target}</span>
         </p>
       )}
-      {hint && <p className="mt-3 border-t border-line pt-3 text-xs leading-relaxed text-ink/55">{hint}</p>}
+      {hint && (
+        <div className="mt-auto pt-3">
+          <p className="border-t border-line pt-3 text-xs leading-relaxed text-ink/55">{hint}</p>
+        </div>
+      )}
     </div>
   );
 }
 
-export function MetricsPanel({ m }: { m: Metrics | null }) {
+export function MetricsPanel({ m, whatsapp }: { m: Metrics | null; whatsapp?: WhatsApp | null }) {
   if (!m) {
     return (
-      <div className="mt-10 rounded-2xl border border-line bg-white">
+      <div className="mt-12 rounded-[22px] border border-line bg-white shadow-card">
         <Empty icon="shield">No health checks yet. They appear once the first invoice is sent.</Empty>
       </div>
     );
@@ -86,7 +93,13 @@ export function MetricsPanel({ m }: { m: Metrics | null }) {
   const paymentRate = num(m.payment_rate_pct);
   const avgInvoice = num(m.avg_invoice_naira);
   const perPro = num(m.docs_per_pro_user);
-  const contribution = num(m.contribution_naira_30d);
+  /*
+   * WhatsApp as Meta charged it (admin_whatsapp), not admin_metrics' per-message
+   * guess. Null until Meta has reported, and then contribution waits too.
+   */
+  const spendKobo = whatsapp?.spend_30d_kobo ?? null;
+  const fees = num(m.fees_earned_naira_30d);
+  const contribution = spendKobo === null || fees === null ? null : fees - spendKobo / 100;
 
   return (
     <section>
@@ -95,7 +108,7 @@ export function MetricsPanel({ m }: { m: Metrics | null }) {
         sub="Rolling 30 days, each against the level where it stops being fine. Active means they sent something, not that they signed up."
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
         <Metric
           label="Active users"
           value={`${m.users_active} of ${m.users_total}`}
@@ -138,20 +151,25 @@ export function MetricsPanel({ m }: { m: Metrics | null }) {
         />
       </div>
 
-      <h3 className="mt-8 mb-3 text-sm font-semibold text-ink/70">Unit economics</h3>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <h3 className="mt-10 mb-3 text-[0.95rem] font-medium text-ink/80">Unit economics</h3>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <Metric
           label="Fees earned"
           value={naira(Math.round((num(m.fees_earned_naira_30d) ?? 0) * 100))}
         />
         <Metric
           label="WhatsApp cost"
-          value={naira(Math.round((num(m.message_cost_naira_30d) ?? 0) * 100))}
-          hint="Every outbound message is charged from 1 October 2026."
+          value={spendKobo === null ? "Not reported yet" : naira(spendKobo)}
+          hint={
+            whatsapp?.spend_reported_through
+              ? `As Meta charged it, through ${shortDate(whatsapp.spend_reported_through)}.`
+              : "From Meta's own report, which lags a day."
+          }
         />
         <Metric
+          className="col-span-2 sm:col-span-1"
           label="Contribution"
-          value={naira(Math.round((contribution ?? 0) * 100))}
+          value={contribution === null ? "—" : naira(Math.round(contribution * 100))}
           ok={contribution === null ? null : contribution > 0}
           hint="Fees earned less what it cost to send them. Before servers and hosting."
         />

@@ -13,7 +13,7 @@
 
 export const PALETTE = ["#10231c", "#f5b82e", "#3f8f5f", "#c2462e", "#8aa399", "#d99a12", "#ddd3bf"] as const;
 
-const TRACK = "#eef0eb";
+const TRACK = "#efe9dd";
 
 /** A nice round top for an axis: 1,234 -> 1,500; 87 -> 100. */
 function niceMax(v: number): number {
@@ -107,13 +107,15 @@ export function ColumnChart({
   const mid = Math.floor(points.length / 2);
 
   return (
-    <div>
-      <div className="flex gap-3" style={{ height }}>
-        <div className="relative w-12 shrink-0">
+    // Headroom above the tallest column, so its label never meets the card's title row.
+    <div className="pt-8">
+      {/* Shorter on a phone, where the card is narrow and the page is long. */}
+      <div className="flex h-[200px] gap-2 sm:h-(--h) sm:gap-3" style={{ "--h": `${height}px` } as React.CSSProperties}>
+        <div className="relative w-10 shrink-0 sm:w-12">
           {ticks.map((t) => (
             <span
               key={t}
-              className="absolute right-0 -translate-y-1/2 text-[0.68rem] text-ink/40 tabular-nums"
+              className="absolute right-0 -translate-y-1/2 text-[0.66rem] text-ink/40 tabular-nums sm:text-[0.68rem]"
               style={{ top: `${(1 - t) * 100}%` }}
             >
               {format(max * t)}
@@ -128,19 +130,21 @@ export function ColumnChart({
               style={{ top: `${(1 - t) * 100}%` }}
             />
           ))}
-          <div className="absolute inset-0 flex items-end gap-[3px] sm:gap-1.5">
+          <div className="absolute inset-0 flex items-end gap-[2px] sm:gap-1.5">
             {points.map((p, i) => {
               const isPeak = i === peak;
+              // Keep the label inside the card at either end of the chart.
+              const edge = i < 3 ? "left-0" : i > points.length - 4 ? "right-0" : "left-1/2 -translate-x-1/2";
               return (
                 <div key={p.label} className="group relative flex h-full flex-1 items-end">
                   <div
-                    className={`relative w-full rounded-t-[5px] transition-colors ${
-                      isPeak ? "bg-marigold" : p.value ? "bg-marigold/30 group-hover:bg-marigold/60" : "bg-ink/[0.05]"
+                    className={`relative w-full rounded-t-[4px] transition-colors sm:rounded-t-[5px] ${
+                      isPeak ? "bg-marigold" : p.value ? "bg-marigold/35 group-hover:bg-marigold/65" : "bg-ink/[0.05]"
                     }`}
                     style={{ height: `${Math.max(1.5, (100 * p.value) / max)}%` }}
                   >
                     <span
-                      className={`pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 rounded-lg bg-ink px-2 py-1 text-[0.7rem] font-medium whitespace-nowrap text-cream shadow-lg ${
+                      className={`pointer-events-none absolute bottom-full z-10 mb-2 rounded-full bg-ink px-2.5 py-1 text-[0.7rem] font-medium whitespace-nowrap text-cream shadow-lg ${edge} ${
                         isPeak ? "block" : "hidden group-hover:block"
                       }`}
                     >
@@ -153,7 +157,7 @@ export function ColumnChart({
           </div>
         </div>
       </div>
-      <div className="mt-2 ml-15 flex justify-between text-[0.7rem] text-ink/40">
+      <div className="mt-2 ml-12 flex justify-between text-[0.7rem] text-ink/40 sm:ml-15">
         <span>{points[0]?.label}</span>
         <span className="hidden sm:inline">{points[mid]?.label}</span>
         <span>Today</span>
@@ -183,15 +187,15 @@ export function DualBars({
         <Key color="#10231c" label={a.name} value={sum(a.values).toLocaleString("en-NG")} />
         <Key color="#f5b82e" label={b.name} value={sum(b.values).toLocaleString("en-NG")} />
       </div>
-      <div className="relative" style={{ height }}>
+      <div className="relative h-[160px] sm:h-(--h)" style={{ "--h": `${height}px` } as React.CSSProperties}>
         {[0.5, 0].map((t) => (
           <div key={t} className="absolute inset-x-0 border-t border-dashed border-line" style={{ top: `${(1 - t) * 100}%` }} />
         ))}
-        <div className="absolute inset-0 flex items-end gap-[3px] sm:gap-1">
+        <div className="absolute inset-0 flex items-end gap-[2px] sm:gap-1">
           {labels.map((l, i) => (
             <div
               key={l}
-              className="flex h-full flex-1 items-end gap-px rounded-sm hover:bg-canvas"
+              className="flex h-full flex-1 items-end gap-px rounded-sm hover:bg-paper"
               title={`${l}: ${a.values[i]} ${a.name.toLowerCase()}, ${b.values[i]} ${b.name.toLowerCase()}`}
             >
               <div
@@ -219,7 +223,7 @@ export function Key({ color, label, value }: { color: string; label: string; val
     <span className="inline-flex items-center gap-2 text-[0.8rem] text-ink/60">
       <span className="size-2.5 rounded-full" style={{ background: color }} />
       {label}
-      {value && <span className="font-semibold text-ink tabular-nums">{value}</span>}
+      {value && <span className="font-medium text-ink tabular-nums">{value}</span>}
     </span>
   );
 }
@@ -274,7 +278,7 @@ export function Donut({
         </svg>
         <div className="absolute inset-0 grid place-items-center text-center">
           <div>
-            <p className="font-display text-2xl leading-none font-semibold tracking-tight tabular-nums">{center}</p>
+            <p className="font-display text-[1.6rem] leading-none font-light tracking-[-0.03em] tabular-nums">{center}</p>
             {sub && <p className="mt-1.5 text-xs text-ink/45">{sub}</p>}
           </div>
         </div>
@@ -289,7 +293,7 @@ export function Donut({
             </span>
             <span className="flex shrink-0 items-center gap-3 tabular-nums">
               <span className="text-ink/55">{s.value.toLocaleString("en-NG")}</span>
-              <span className="w-10 text-right font-semibold">{total > 0 ? `${Math.round((100 * s.value) / total)}%` : "—"}</span>
+              <span className="w-10 text-right font-medium">{total > 0 ? `${Math.round((100 * s.value) / total)}%` : "—"}</span>
             </span>
           </li>
         ))}
@@ -338,7 +342,7 @@ export function Gauge({ pct, target, label }: { pct: number | null; target: numb
         </svg>
         <div className="absolute inset-0 grid place-items-center">
           <div>
-            <p className="font-display text-[2rem] leading-none font-semibold tracking-tight tabular-nums">
+            <p className="font-display text-[2.1rem] leading-none font-light tracking-[-0.035em] tabular-nums">
               {pct === null ? "—" : `${Math.round(v)}%`}
             </p>
             <p className="mt-1.5 text-xs text-ink/45">{label}</p>
@@ -346,7 +350,7 @@ export function Gauge({ pct, target, label }: { pct: number | null; target: numb
         </div>
       </div>
       <p className="mt-3 text-xs text-ink/50">
-        Target <span className="font-semibold text-ink">{target}%</span>
+        Target <span className="font-medium text-ink">{target}%</span>
       </p>
     </div>
   );
@@ -366,17 +370,12 @@ export function Funnel({ steps }: { steps: { label: string; value: number }[] })
         return (
           <li key={s.label}>
             <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
-              <span className="flex items-center gap-2 text-ink/75">
-                <span className="grid size-5 place-items-center rounded-md bg-canvas text-[0.65rem] font-semibold text-ink/55">
-                  {i + 1}
-                </span>
-                {s.label}
-              </span>
+              <span className="min-w-0 truncate text-ink/75">{s.label}</span>
               <span className="flex items-baseline gap-2 tabular-nums">
                 {kept !== null && (
                   <span className={`text-xs font-medium ${kept >= 50 ? "text-moss" : "text-clay"}`}>{kept}%</span>
                 )}
-                <span className="font-semibold">{s.value.toLocaleString("en-NG")}</span>
+                <span className="font-medium">{s.value.toLocaleString("en-NG")}</span>
               </span>
             </div>
             <div className="h-2 overflow-hidden rounded-full" style={{ background: TRACK }}>
@@ -417,7 +416,7 @@ export function RankedBars({
         <li key={it.label}>
           <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
             <span className="truncate text-ink/75">{it.label}</span>
-            <span className="shrink-0 font-semibold tabular-nums">
+            <span className="shrink-0 font-medium tabular-nums">
               {it.value.toLocaleString("en-NG")}
               {it.note && <span className="ml-1.5 font-normal text-ink/45">{it.note}</span>}
             </span>
@@ -459,7 +458,7 @@ export function HourStrip({ counts }: { counts: number[] }) {
       </div>
       {counts.some((c) => c > 0) && (
         <p className="mt-3 text-xs text-ink/55">
-          Busiest at <strong className="font-semibold text-ink">{String(peak).padStart(2, "0")}:00</strong> Lagos time
+          Busiest at <strong className="font-medium text-ink">{String(peak).padStart(2, "0")}:00</strong> Lagos time
         </p>
       )}
     </div>
