@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { Pill, btn } from "@/components/ui";
 import { Icon } from "@/components/icons";
-import { X_LIMIT, slidePath, type Platform, type Post } from "@/lib/content";
+import { X_LIMIT, slidePath, xLength, type Platform, type Post } from "@/lib/content";
 import { zip } from "@/lib/zip";
 
 /*
@@ -36,7 +36,8 @@ export function PostPanel({ post }: { post: Post }) {
   const all = Array.from({ length: post.slides }, (_, i) => i + 1);
   const used = platform === "x" ? (post.x.slides ?? all.slice(0, 4)) : all;
   const caption = platform === "x" ? post.x.caption : post.instagram.caption;
-  const over = platform === "x" && caption.length > X_LIMIT;
+  const count = platform === "x" ? xLength(caption) : caption.length;
+  const over = platform === "x" && count > X_LIMIT;
   const base = `balans-${post.id}`;
 
   async function copy() {
@@ -140,7 +141,7 @@ export function PostPanel({ post }: { post: Post }) {
           </pre>
           <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-2.5 text-xs text-ink/50">
             <span className={over ? "font-medium text-clay" : ""}>
-              {caption.length}
+              {count}
               {platform === "x" && ` / ${X_LIMIT}`} characters
             </span>
             <span>

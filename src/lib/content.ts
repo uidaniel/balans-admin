@@ -33,10 +33,16 @@ export type Post = {
   note?: string;
 };
 
-/** X counts a link as 23 characters whatever its length; we keep links bare, so plain length is close enough. */
 export const X_LIMIT = 280;
 
+/** Length as X counts it: every link, bare domains like balans.ng included, is 23 characters. */
+export function xLength(text: string): number {
+  return text.replace(/\b(?:https?:\/\/)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:ng|com|net|org|io|co|app)\b\S*/gi, "x".repeat(23)).length;
+}
+
 const TAGS = "#Balans #Invoicing #Freelancers #SmallBusinessNigeria #WhatsAppBusiness";
+/** X does better with one or two tags than a block of them. */
+const X_TAGS = "#Invoicing #SmallBusinessNigeria";
 
 export const POSTS: Post[] = [
   {
@@ -69,7 +75,9 @@ ${TAGS}`,
 4. Late? Balans reminds them
 5. Mark it paid, they get a receipt
 
-First 3 invoices free. balans.ng`,
+First 3 invoices free. balans.ng
+
+${X_TAGS}`,
       slides: [1, 2, 4, 5],
     },
     note: "On X, post slides 1, 2, 4 and 5; the pack has them already picked.",
@@ -94,7 +102,9 @@ balans.ng
 
 November is here. Send every invoice on WhatsApp with Balans.
 
-balans.ng`,
+balans.ng
+
+#HappyNewMonth #SmallBusinessNigeria`,
     },
   },
   {
@@ -117,7 +127,9 @@ ${TAGS}`,
 
 Create it on WhatsApp with Balans. Your client pays you straight into your bank.
 
-balans.ng`,
+balans.ng
+
+${X_TAGS}`,
     },
   },
   {
@@ -142,7 +154,9 @@ ${TAGS}`,
 
 On the due date, then 3 and 7 days late. By email and WhatsApp, in your business name.
 
-balans.ng`,
+balans.ng
+
+${X_TAGS}`,
     },
   },
   {
@@ -173,9 +187,11 @@ Due date: a gentle nudge
 7 days late: ask a question
 Gone quiet: set a date
 
-Four messages you can copy. Or let Balans send the reminders for you.
+Four messages to copy, or let Balans send the reminders.
 
-balans.ng`,
+balans.ng
+
+#Freelancers #SmallBusinessNigeria`,
       slides: [2, 3, 4, 5],
     },
     note: "On X, post the four message slides (2 to 5); the cover is for Instagram.",
