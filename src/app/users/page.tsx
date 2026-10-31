@@ -1,5 +1,6 @@
 import { naira, shortDate } from "@/lib/money";
-import { loadAccounts, loadUnverifiedSubaccounts, type AccountSort } from "@/lib/dashboard";
+import Link from "next/link";
+import { countUnfinished, loadAccounts, loadPaidTo, loadUnverifiedSubaccounts, type AccountSort } from "@/lib/dashboard";
 import { Avatar, Card, Empty, Notice, Pill, Segmented, Stat, btn, fieldWithIcon, statGrid, table } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { serviceClient } from "@/lib/supabase";
@@ -19,14 +20,15 @@ const SORTS: { id: AccountSort; label: string }[] = [
 /**
  * Every user, with what they have billed and been paid.
  *
- * A plain GET form for the search and links for the sort, so the address is
- * the state: a filtered list can be bookmarked or sent to somebody, and it
- * works with nothing on the page but HTML.
+ * A user is somebody who finished setup; `all=1` adds those who started and
+ * did not. A plain GET form for the search and links for the sort and that
+ * toggle, so the address is the state: a filtered list can be bookmarked or
+ * sent to somebody, and it works with nothing on the page but HTML.
  */
 export default async function UsersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; sort?: string; plan_ok?: string; plan_error?: string }>;
+  searchParams: Promise<{ q?: string; sort?: string; all?: string; plan_ok?: string; plan_error?: string }>;
 }) {
   const g = await gate();
   if (!g.staff) return g.stop;
@@ -34,16 +36,31 @@ export default async function UsersPage({
   const params = await searchParams;
   const q = (params.q ?? "").slice(0, 80);
   const sort = (SORTS.find((s) => s.id === params.sort)?.id ?? "invoiced") as AccountSort;
-  const [accounts, pros] = await Promise.all([
-    loadAccounts(q, sort),
+  const all = params.all === "1";
+  const [accounts, pros, paidTo, unfinished] = await Promise.all([
+    loadAccounts(q, sort, !all),
     // Only Pro accounts have an end date worth showing, and there are few of them.
     serviceClient().from("users").select("id, plan_expires_at").eq("plan", "pro"),
+    loadPaidTo(),
+    countUnfinished(q),
   ]);
   const unverified = await loadUnverifiedSubaccounts();
   const toVerify = new Set((unverified.data ?? []).map((u) => u.userId));
   const proUntil = new Map((pros.data ?? []).map((u) => [u.id as string, (u.plan_expires_at as string | null) ?? null]));
+  /*
+   * Setup can be finished without a bank account now. Flagged only when the
+   * read worked, so a failed one does not mark everybody.
+   */
+  const noBank = (a: { id: string; onboarded_at: string | null }) =>
+    Boolean(a.onboarded_at) && paidTo.data !== null && !paidTo.data.has(a.id);
   const canChange = g.staff.role === "admin";
-  const here = `/users?${new URLSearchParams({ ...(q ? { q } : {}), sort }).toString()}`;
+  const link = (to: { sort?: string; all?: boolean }) =>
+    `/users?${new URLSearchParams({
+      ...(q ? { q } : {}),
+      sort: to.sort ?? sort,
+      ...((to.all ?? all) ? { all: "1" } : {}),
+    }).toString()}`;
+  const here = link({});
 
   const rows = accounts.data ?? [];
   const totals = rows.reduce(
@@ -56,14 +73,13 @@ export default async function UsersPage({
     { invoiced: 0, collected: 0, outstanding: 0, pro: 0 },
   );
 
-  const href = (s: string) => `/users?${new URLSearchParams({ ...(q ? { q } : {}), sort: s }).toString()}`;
 
   return (
     <Shell
       email={g.staff.email}
       current="/users"
       title="Users"
-      sub="Every account, with what they have billed and been paid."
+      sub="Everyone who finished setup, with what they have billed and been paid."
     >
       {(params.plan_ok || params.plan_error) && (
         <Notice tone={params.plan_error ? "clay" : "moss"} role="status" className="mb-4">
@@ -75,7 +91,7 @@ export default async function UsersPage({
         <div className={`mb-4 ${statGrid}`}>
           <Stat
             icon="users"
-            label={q ? "Matching" : "Accounts"}
+            label={q ? "Matching" : all ? "Accounts" : "Users"}
             value={rows.length.toLocaleString("en-NG")}
             note={`${totals.pro} on Pro`}
           />
@@ -94,6 +110,7 @@ export default async function UsersPage({
         <div className="flex flex-col gap-3 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
           <form method="get" className="flex w-full gap-2 lg:max-w-md">
             <input type="hidden" name="sort" value={sort} />
+            {all && <input type="hidden" name="all" value="1" />}
             <label className="relative flex-1">
               <span className="sr-only">Search users</span>
               <Icon name="search" className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink/40" />
@@ -109,7 +126,12 @@ export default async function UsersPage({
               Search
             </button>
           </form>
-          <Segmented current={sort} items={SORTS.map((s) => ({ id: s.id, label: s.label, href: href(s.id) }))} />
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+            <Segmented current={sort} items={SORTS.map((s) => ({ id: s.id, label: s.label, href: link({ sort: s.id }) }))} />
+            <Link href={link({ all: !all })} className={`${btn.secondary} self-start sm:self-auto`}>
+              {all ? "Hide unfinished" : `Show unfinished${unfinished === null ? "" : ` (${unfinished.toLocaleString("en-NG")})`}`}
+            </Link>
+          </div>
         </div>
 
         {accounts.error ? (
@@ -118,7 +140,7 @@ export default async function UsersPage({
           </div>
         ) : rows.length === 0 ? (
           <div className="border-t border-line">
-            <Empty icon="users">{q ? `Nobody matches “${q}”.` : "No users yet."}</Empty>
+            <Empty icon="users">{q ? `Nobody matches “${q}”.` : all ? "No accounts yet." : "Nobody has finished setup yet."}</Empty>
           </div>
         ) : (
           <>
@@ -126,7 +148,7 @@ export default async function UsersPage({
           <ul className={`${table.list} lg:hidden`}>
             {rows.map((a) => {
               const name = a.business_name ?? `+${a.wa_phone}`;
-              const flags = !a.onboarded_at || toVerify.has(a.id) || a.status !== "active";
+              const flags = !a.onboarded_at || noBank(a) || toVerify.has(a.id) || a.status !== "active";
               return (
                 <li key={a.id} className={`${table.item} flex gap-3`}>
                   <Avatar name={name} />
@@ -150,6 +172,7 @@ export default async function UsersPage({
                     {flags && (
                       <div className="mt-2 flex flex-wrap gap-1">
                         {!a.onboarded_at && <Pill tone="marigold">Setup unfinished</Pill>}
+                        {noBank(a) && <Pill tone="marigold">No bank yet</Pill>}
                         {toVerify.has(a.id) && <Pill tone="clay">Verify on Paystack</Pill>}
                         {a.status !== "active" && <Pill tone="clay">{a.status}</Pill>}
                       </div>
@@ -218,6 +241,7 @@ export default async function UsersPage({
                             </p>
                             <div className="mt-0.5 flex flex-wrap gap-1">
                               {!a.onboarded_at && <Pill tone="marigold">Setup unfinished</Pill>}
+                              {noBank(a) && <Pill tone="marigold">No bank yet</Pill>}
                               {toVerify.has(a.id) && <Pill tone="clay">Verify on Paystack</Pill>}
                               {a.status !== "active" && <Pill tone="clay">{a.status}</Pill>}
                             </div>

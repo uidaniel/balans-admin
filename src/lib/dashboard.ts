@@ -137,19 +137,30 @@ const SORTS: Record<AccountSort, { column: string; ascending: boolean }> = {
 };
 
 /**
- * Every user, searched by name, phone or email.
+ * The search, as a PostgREST `or` filter, or null for none.
  *
- * The search goes to Postgres rather than filtering a page of rows, so it
- * finds somebody past the first thousand. The term is stripped of the
- * characters PostgREST's filter syntax gives meaning to, so a comma or a
- * bracket typed into the box cannot change what is being asked.
+ * It goes to Postgres rather than filtering a page of rows, so it finds
+ * somebody past the first thousand. The term is stripped of the characters
+ * PostgREST's filter syntax gives meaning to, so a comma or a bracket typed
+ * into the box cannot change what is being asked.
  */
-export async function loadAccounts(q: string, sort: AccountSort): Promise<Loaded<Account[]>> {
-  let query = serviceClient().from("admin_accounts").select("*");
+function searchFilter(q: string): string | null {
   const term = q.replace(/[,()*%\\]/g, " ").trim();
-  if (term) {
-    query = query.or(`business_name.ilike.*${term}*,wa_phone.ilike.*${term}*,email.ilike.*${term}*`);
-  }
+  return term ? `business_name.ilike.*${term}*,wa_phone.ilike.*${term}*,email.ilike.*${term}*` : null;
+}
+
+/**
+ * Users, searched by name, phone or email.
+ *
+ * A user is somebody who finished setup (`onboarded_at`, which is
+ * `consented_at`); `finishedOnly` false adds everybody who started and did
+ * not, for the Users page's toggle and for the Overview's lists.
+ */
+export async function loadAccounts(q: string, sort: AccountSort, finishedOnly = false): Promise<Loaded<Account[]>> {
+  let query = serviceClient().from("admin_accounts").select("*");
+  const search = searchFilter(q);
+  if (search) query = query.or(search);
+  if (finishedOnly) query = query.not("onboarded_at", "is", null);
   const s = SORTS[sort] ?? SORTS.invoiced;
   const { data, error } = await query.order(s.column, { ascending: s.ascending, nullsFirst: false }).limit(1000);
   if (error || !data) return { data: null, error: error?.message ?? "no rows" };
@@ -170,6 +181,15 @@ export async function loadAccounts(q: string, sort: AccountSort): Promise<Loaded
     ),
     error: null,
   };
+}
+
+/** How many matching accounts have not finished setup, for "Show unfinished (N)". */
+export async function countUnfinished(q: string): Promise<number | null> {
+  let query = serviceClient().from("admin_accounts").select("id", { count: "exact", head: true }).is("onboarded_at", null);
+  const search = searchFilter(q);
+  if (search) query = query.or(search);
+  const { count, error } = await query;
+  return error ? null : (count ?? 0);
 }
 
 export async function loadPayments(status: string): Promise<Loaded<Payment[]>> {
@@ -265,6 +285,156 @@ export async function loadInsights(): Promise<Loaded<Insights>> {
     }
   }
   return { data: out as Insights, error: null };
+}
+
+/*
+ * Setup, and the nudges for somebody who stopped part-way (API migration 0050).
+ *
+ * Read from `users` rather than a view: no admin_* view carries the nudge
+ * stamps yet. "Finished setup" is `consented_at` set, as in admin_overview
+ * and the funnel; "finished after a nudge" is `activated_setup_at` later
+ * than the stamp. Both stamps are set when the job claims somebody, before
+ * the send, so a nudge WhatsApp then would not deliver still counts as sent.
+ *
+ * Email is asked after the first invoice now, not before setup, so it is
+ * counted among those who finished setup rather than as a step before it.
+ * So is a bank account, which setup lets them skip: `banked` is those who
+ * finished setup and have somewhere to be paid, the funnel's third step.
+ */
+export type Setup = {
+  /** Finished setup: what the dashboard calls a user. */
+  finished: number;
+  finished24h: number;
+  /** Setups finished per Lagos day (YYYY-MM-DD), to line up with admin_daily. */
+  finishedOn: Record<string, number>;
+  /** Finished setup and has somewhere to be paid (loadPaidTo). */
+  banked: number;
+  emailVerified: number;
+  nudged: number;
+  nudgedFinished: number;
+  followedUp: number;
+  followedUpFinished: number;
+  stuck: number;
+  stuckNudged: number;
+};
+
+type Stamps = {
+  consented_at: string | null;
+  activated_setup_at: string | null;
+  setup_nudge_at: string | null;
+  setup_followup_at: string | null;
+};
+
+const after = (a: string | null, b: string | null) => a !== null && b !== null && new Date(a) > new Date(b);
+
+/** Every row a query matches, a page at a time: PostgREST stops at a thousand. */
+async function allRows<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>,
+): Promise<{ rows: T[]; error: string | null }> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await page(from, from + 999);
+    if (error || !data) return { rows, error: error?.message ?? "no rows" };
+    rows.push(...(data as T[]));
+    if (data.length < 1000) return { rows, error: null };
+  }
+}
+
+/**
+ * Who has somewhere to be paid: an active bank account, or, for somebody
+ * paid from abroad to details of their own (PayPal, Wise and the like, API
+ * migration 0034), `abroad_pay_by = 'own'` with those details filled in.
+ * They have no Nigerian account and need none, so they count as set up to
+ * be paid. Bank details became skippable in setup, so "finished setup" no
+ * longer means this.
+ *
+ * A pending row is not enough: setup's account stays pending until it is
+ * confirmed, and nothing settles to it before then.
+ */
+export async function loadPaidTo(): Promise<Loaded<Set<string>>> {
+  const sb = serviceClient();
+  const [banks, own] = await Promise.all([
+    allRows<{ user_id: string }>((a, b) =>
+      sb.from("bank_accounts").select("user_id").eq("status", "active").order("id").range(a, b),
+    ),
+    allRows<{ id: string; payment_details: string | null }>((a, b) =>
+      sb
+        .from("users")
+        .select("id, payment_details")
+        .eq("abroad_pay_by", "own")
+        .not("payment_details", "is", null)
+        .order("id")
+        .range(a, b),
+    ),
+  ]);
+  const error = banks.error ?? own.error;
+  if (error) return { data: null, error };
+  return {
+    data: new Set([
+      ...banks.rows.map((r) => r.user_id),
+      ...own.rows.filter((r) => (r.payment_details ?? "").trim() !== "").map((r) => r.id),
+    ]),
+    error: null,
+  };
+}
+
+export async function loadSetup(): Promise<Loaded<Setup>> {
+  const sb = serviceClient();
+  const users = () => sb.from("users").select("id", { count: "exact", head: true }).is("deleted_at", null);
+
+  const [finished, verified, stuck, nudged, paidTo] = await Promise.all([
+    allRows<{ id: string; consented_at: string }>((a, b) =>
+      sb
+        .from("users")
+        .select("id, consented_at")
+        .is("deleted_at", null)
+        .not("consented_at", "is", null)
+        .order("id")
+        .range(a, b),
+    ),
+    users().not("consented_at", "is", null).not("email_verified_at", "is", null),
+    users().is("consented_at", null),
+    // Everybody either nudge reached; comparing two columns cannot be a filter.
+    allRows<Stamps>((a, b) =>
+      sb
+        .from("users")
+        .select("consented_at, activated_setup_at, setup_nudge_at, setup_followup_at")
+        .is("deleted_at", null)
+        .or("setup_nudge_at.not.is.null,setup_followup_at.not.is.null")
+        .order("id")
+        .range(a, b),
+    ),
+    loadPaidTo(),
+  ]);
+  const error = finished.error ?? verified.error?.message ?? stuck.error?.message ?? nudged.error ?? paidTo.error;
+  if (error) return { data: null, error };
+
+  const dayOf = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos" });
+  const finishedOn: Record<string, number> = {};
+  for (const r of finished.rows) {
+    const day = dayOf.format(new Date(r.consented_at));
+    finishedOn[day] = (finishedOn[day] ?? 0) + 1;
+  }
+  const dayAgo = Date.now() - 24 * 3600_000;
+
+  const chat = nudged.rows.filter((r) => r.setup_nudge_at !== null);
+  const followed = nudged.rows.filter((r) => r.setup_followup_at !== null);
+  return {
+    data: {
+      finished: finished.rows.length,
+      finished24h: finished.rows.filter((r) => new Date(r.consented_at).getTime() > dayAgo).length,
+      finishedOn,
+      banked: finished.rows.filter((r) => paidTo.data!.has(r.id)).length,
+      emailVerified: verified.count ?? 0,
+      nudged: chat.length,
+      nudgedFinished: chat.filter((r) => after(r.activated_setup_at, r.setup_nudge_at)).length,
+      followedUp: followed.length,
+      followedUpFinished: followed.filter((r) => after(r.activated_setup_at, r.setup_followup_at)).length,
+      stuck: stuck.count ?? 0,
+      stuckNudged: nudged.rows.filter((r) => r.consented_at === null).length,
+    },
+    error: null,
+  };
 }
 
 /*

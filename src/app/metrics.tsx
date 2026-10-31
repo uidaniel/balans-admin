@@ -80,7 +80,20 @@ function Metric({
   );
 }
 
-export function MetricsPanel({ m, whatsapp }: { m: Metrics | null; whatsapp?: WhatsApp | null }) {
+/**
+ * `users` is everybody who finished setup (admin_overview's users_onboarded),
+ * what the dashboard calls a user. admin_metrics' own users_total counts
+ * every sign-up, so it is not used: without `users` the figure stands alone.
+ */
+export function MetricsPanel({
+  m,
+  whatsapp,
+  users,
+}: {
+  m: Metrics | null;
+  whatsapp?: WhatsApp | null;
+  users?: number | null;
+}) {
   if (!m) {
     return (
       <div className="mt-12 rounded-[22px] border border-line bg-white shadow-card">
@@ -111,8 +124,8 @@ export function MetricsPanel({ m, whatsapp }: { m: Metrics | null; whatsapp?: Wh
       <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
         <Metric
           label="Active users"
-          value={`${m.users_active} of ${m.users_total}`}
-          hint="About 31 active users covers a lean setup; 137 if the monthly bill reaches ₦80,000."
+          value={users == null ? String(m.users_active) : `${m.users_active} of ${users}`}
+          hint="Break-even is counted in Pro subscribers, not users: about 7 cover a lean ₦18,000 a month, 29 an ₦80,000 one, before WhatsApp."
         />
         <Metric
           label="Pro conversion"
@@ -126,21 +139,21 @@ export function MetricsPanel({ m, whatsapp }: { m: Metrics | null; whatsapp?: Wh
           value={perPro === null ? "—" : String(perPro)}
           target=">8/month"
           ok={perPro === null ? null : perPro >= 8}
-          hint="Under five and they are paying ₦4,000 for what Free already gives them. That is churn arriving."
+          hint="Under five a month, ₦3,000 is buying little they use. Pro does not renew by itself, so that is churn arriving."
         />
         <Metric
           label="Payment rate"
           value={paymentRate === null ? "—" : `${paymentRate}%`}
           target=">70%"
           ok={paymentRate === null ? null : paymentRate >= 70}
-          hint={`${m.documents_paid_30d} paid of ${m.documents_30d} sent. A Free user costs ₦154 a month whatever the rate, so on small invoices they go negative below about 51%.`}
+          hint={`${m.documents_paid_30d} paid of ${m.documents_30d} sent. Balans takes no fee on naira invoices, so this earns nothing directly: it is whether Balans works for them, and so whether Pro gets renewed.`}
         />
         <Metric
           label="Average invoice"
           value={avgInvoice === null ? "—" : naira(Math.round(avgInvoice * 100))}
           target=">₦20,000"
           ok={avgInvoice === null ? null : avgInvoice >= 20_000}
-          hint="Free-tier value scales almost linearly with this. It is no longer where the risk sits — watch the payment rate instead."
+          hint="No revenue rides on this, since naira invoices carry no fee. It says who Pro is for: people billing enough that ₦3,000 a month is small beside it."
         />
         <Metric
           label="Pro cancellations"

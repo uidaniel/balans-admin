@@ -6,12 +6,15 @@ import { loadUnverifiedSubaccounts, PAYSTACK_SUBACCOUNTS_URL,
   loadInsights,
   loadOverview,
   loadPayments,
+  loadSetup,
   loadWhatsApp,
   type Account,
   type Day,
   type Insights,
+  type Loaded,
   type Overview,
   type Payment,
+  type Setup,
   type WhatsApp,
 } from "@/lib/dashboard";
 import {
@@ -35,15 +38,16 @@ export const dynamic = "force-dynamic";
  * The whole business on one page.
  *
  * Every figure is defined once, in the admin_* views in the API's migrations
- * (0027, 0028); this page only lays them out. It reads top to bottom in the
- * order the questions come: how is it going, where is the money, who is
- * using it and how, and what needs looking at.
+ * (0027, 0028); this page only lays them out. The one exception is setup and
+ * its nudges, counted from `users` until a view carries them (loadSetup). It
+ * reads top to bottom in the order the questions come: how is it going,
+ * where is the money, who is using it and how, and what needs looking at.
  */
 export default async function OverviewPage() {
   const g = await gate();
   if (!g.staff) return g.stop;
 
-  const [overview, daily, insights, top, recent, health, whatsapp] = await Promise.all([
+  const [overview, daily, insights, top, recent, health, whatsapp, setup] = await Promise.all([
     loadOverview(),
     loadDaily(),
     loadInsights(),
@@ -51,6 +55,7 @@ export default async function OverviewPage() {
     loadPayments("success"),
     loadHealth(),
     loadWhatsApp(),
+    loadSetup(),
   ]);
   const unverified = await loadUnverifiedSubaccounts();
   const waiting = unverified.data ?? [];
@@ -91,7 +96,7 @@ export default async function OverviewPage() {
         <Failed what="the overview" error={overview.error ?? daily.error ?? "unknown"} />
       ) : (
         <>
-          <Headline o={overview.data!} days={daily.data} onPro={onPro} />
+          <Headline o={overview.data!} days={daily.data} s={setup.data} onPro={onPro} />
           <div className="mt-4 grid gap-4 xl:grid-cols-3">
             <Card
               className="xl:col-span-2"
@@ -115,7 +120,7 @@ export default async function OverviewPage() {
           </div>
           <RightNow o={overview.data!} />
           <MoneySection o={overview.data!} i={insights.data} w={whatsapp.data} />
-          <GrowthSection o={overview.data!} days={daily.data} i={insights.data} onPro={onPro} />
+          <GrowthSection o={overview.data!} days={daily.data} i={insights.data} s={setup} onPro={onPro} />
           {insights.data ? (
             <UsageSection o={overview.data!} i={insights.data} />
           ) : (
@@ -153,7 +158,7 @@ export default async function OverviewPage() {
         </Card>
       </div>
 
-      <MetricsPanel m={health} whatsapp={whatsapp.data} />
+      <MetricsPanel m={health} whatsapp={whatsapp.data} users={overview.data?.users_onboarded ?? null} />
     </Shell>
   );
 }
@@ -162,9 +167,10 @@ export default async function OverviewPage() {
 /* Headline                                                                   */
 /* -------------------------------------------------------------------------- */
 
-function Headline({ o, days, onPro }: { o: Overview; days: Day[]; onPro: number | null }) {
+function Headline({ o, days, s, onPro }: { o: Overview; days: Day[]; s: Setup | null; onPro: number | null }) {
   const collected = days.map((d) => d.collected_kobo);
-  const signups = days.map((d) => d.signups);
+  // A user is somebody who finished setup, so the bars are setups finished.
+  const setups = s ? days.map((d) => s.finishedOn[d.day] ?? 0) : null;
   const docs = days.map((d) => d.documents);
 
   return (
@@ -193,11 +199,11 @@ function Headline({ o, days, onPro }: { o: Overview; days: Day[]; onPro: number 
       <Kpi
         label="Users"
         icon="users"
-        value={o.users_total.toLocaleString("en-NG")}
-        note={`${o.signups_24h} joined in the last 24 hours`}
-        delta={weekChange(signups)}
+        value={o.users_onboarded.toLocaleString("en-NG")}
+        note={s ? `${s.finished24h} finished setup in the last 24 hours` : "Finished setup"}
+        delta={setups ? weekChange(setups) : undefined}
       >
-        <MiniBars values={signups} />
+        {setups && <MiniBars values={setups} />}
       </Kpi>
       <Kpi
         label="Documents, 30 days"
@@ -361,13 +367,26 @@ function MoneySection({ o, i, w }: { o: Overview; i: Insights | null; w: WhatsAp
 /* Growth                                                                     */
 /* -------------------------------------------------------------------------- */
 
-function GrowthSection({ o, days, i, onPro }: { o: Overview; days: Day[]; i: Insights | null; onPro: number | null }) {
+function GrowthSection({
+  o,
+  days,
+  i,
+  s,
+  onPro,
+}: {
+  o: Overview;
+  days: Day[];
+  i: Insights | null;
+  s: Loaded<Setup>;
+  onPro: number | null;
+}) {
   const conversion = o.users_active_30d > 0 ? (100 * o.pro_users) / o.users_active_30d : null;
+  const verified = s.data ? `${s.data.emailVerified.toLocaleString("en-NG")}${share(s.data.emailVerified, s.data.finished, " of finished setup")}` : "—";
   return (
     <>
       <SectionTitle title="Growth" sub="Who is joining, and how far they get." />
       <div className={statGrid}>
-        <Stat icon="check" label="Finished setup" value={String(o.users_onboarded)} note={`of ${o.users_total} who signed up`} />
+        <Stat icon="check" label="Finished setup" value={String(o.users_onboarded)} note={`of ${o.users_total} who started setup`} />
         <Stat icon="activity" label="Active, 30 days" value={String(o.users_active_30d)} note="Sent at least one document" />
         <Stat
           icon="zap"
@@ -388,29 +407,77 @@ function GrowthSection({ o, days, i, onPro }: { o: Overview; days: Day[]; i: Ins
         <Card title="From sign-up to paying" sub="Each step against the one before">
           {i ? (
             <>
+              {/*
+               * Email is not a step: it is asked after the first invoice and
+               * confirmed by link, so it sits beside the funnel, against those
+               * who finished setup. A bank account is, now setup lets them
+               * skip it; it comes from `users` (loadSetup), so it is left out
+               * rather than guessed when that read fails.
+               */}
               <Funnel
                 steps={[
-                  { label: "Signed up", value: i.funnel_signed_up },
-                  { label: "Email verified", value: i.funnel_email_verified },
+                  { label: "Started setup", value: i.funnel_signed_up },
                   { label: "Finished setup", value: i.funnel_set_up },
+                  ...(s.data ? [{ label: "Added bank account", value: s.data.banked }] : []),
                   { label: "Sent a document", value: i.funnel_first_document },
                   { label: "Got paid", value: i.funnel_first_paid },
                   { label: "Paid for Pro", value: i.funnel_ever_pro },
                 ]}
               />
-              {i.median_minutes_to_first_document !== null && (
-                <p className="mt-5 border-t border-line pt-3 text-xs text-ink/50">
-                  Median time from sign-up to first document:{" "}
-                  <strong className="font-medium text-ink">{formatMinutes(i.median_minutes_to_first_document)}</strong>
-                </p>
-              )}
+              <dl className="mt-5 space-y-2.5 border-t border-line pt-3.5 text-sm">
+                <Row k="Email verified" v={verified} />
+                {i.median_minutes_to_first_document !== null && (
+                  <Row k="Sign-up to first document, median" v={formatMinutes(i.median_minutes_to_first_document)} muted />
+                )}
+              </dl>
             </>
           ) : (
             <Empty icon="filter">Insights not available yet.</Empty>
           )}
         </Card>
       </div>
+      <SetupNudges s={s} />
     </>
+  );
+}
+
+/*
+ * Somebody who stops part-way through setup gets two touches (the API's
+ * jobs/setup-nudges.ts): one in the chat a few hours on, and a template and
+ * an email two days on. Each is counted with how many finished after it,
+ * then who has still not finished, nudged or not.
+ */
+function SetupNudges({ s }: { s: Loaded<Setup> }) {
+  if (!s.data) {
+    return (
+      <Card className="mt-4" title="Setup nudges">
+        <Failed what="setup nudges" error={s.error} />
+      </Card>
+    );
+  }
+  const d = s.data;
+  const cols = [
+    { k: "Chat nudges", v: d.nudged, note: `${d.nudgedFinished} finished after${share(d.nudgedFinished, d.nudged)}` },
+    { k: "Follow-ups", v: d.followedUp, note: `${d.followedUpFinished} finished after${share(d.followedUpFinished, d.followedUp)}` },
+    { k: "Still not set up", v: d.stuck, note: `${d.stuckNudged} nudged · ${d.stuck - d.stuckNudged} not yet` },
+  ];
+  return (
+    <Card className="mt-4" title="Setup nudges" sub="For people who stopped part-way: in the chat after a few hours, then a template and email two days on">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 sm:divide-x sm:divide-line">
+        {cols.map((c) => (
+          <div key={c.k} className="min-w-0 sm:px-5 sm:first:pl-0 sm:last:pr-0">
+            <p className="text-xs font-medium text-ink/45">{c.k}</p>
+            <p className="mt-2 font-display text-[1.6rem] leading-tight font-light tracking-[-0.03em] tabular-nums">
+              {c.v.toLocaleString("en-NG")}
+            </p>
+            <p className="text-xs text-ink/50">{c.note}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-5 border-t border-line pt-3 text-xs text-ink/45">
+        Counted when the job picks somebody, before the send, so one WhatsApp would not deliver still counts.
+      </p>
+    </Card>
   );
 }
 
@@ -807,6 +874,11 @@ function formatHours(h: number): string {
   if (h < 1) return `${Math.round(h * 60)} min`;
   if (h < 48) return `${h.toFixed(h < 10 ? 1 : 0)} h`;
   return `${(h / 24).toFixed(1)} days`;
+}
+
+/** " · 40%", or nothing when there is nothing to take a share of. */
+function share(part: number, whole: number, of = ""): string {
+  return whole > 0 ? ` · ${Math.round((100 * part) / whole)}%${of}` : "";
 }
 
 function formatMinutes(m: number): string {
