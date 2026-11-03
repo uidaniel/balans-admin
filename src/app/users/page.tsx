@@ -156,9 +156,9 @@ export default async function UsersPage({
                   <Avatar name={name} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-3">
-                      <p className={`truncate font-medium ${a.business_name ? "" : "text-ink/45"}`}>
+                      <Link href={`/users/${a.id}`} className={`truncate font-medium hover:underline ${a.business_name ? "" : "text-ink/45"}`}>
                         {a.business_name ?? "Not set up"}
-                      </p>
+                      </Link>
                       <p className="shrink-0 text-sm font-medium tabular-nums">{naira(a.invoiced_kobo)}</p>
                     </div>
                     <div className="mt-0.5 flex items-baseline justify-between gap-3 text-xs text-ink/50">
@@ -241,9 +241,9 @@ export default async function UsersPage({
                         <div className="flex items-center gap-3">
                           <Avatar name={name} />
                           <div className="min-w-0">
-                            <p className={`truncate font-medium ${a.business_name ? "" : "text-ink/45"}`}>
+                            <Link href={`/users/${a.id}`} className={`block truncate font-medium hover:underline ${a.business_name ? "" : "text-ink/45"}`}>
                               {a.business_name ?? "Not set up"}
-                            </p>
+                            </Link>
                             <div className="mt-0.5 flex flex-wrap gap-1">
                               {!a.onboarded_at && <Pill tone="marigold">Setup unfinished</Pill>}
                               {noBank(a) && <Pill tone="marigold">No bank yet</Pill>}
