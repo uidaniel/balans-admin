@@ -1,5 +1,5 @@
 import { serviceClient } from "@/lib/supabase";
-import { Card, Empty, Notice, Pill, Stat, table, type PillTone } from "@/components/ui";
+import { Card, Empty, Notice, Pill, SectionTitle, Stat, table, type PillTone } from "@/components/ui";
 import { Failed, gate, Shell } from "../shell";
 import { Refresh } from "./refresh";
 
@@ -53,7 +53,10 @@ export default async function HealthPage() {
   const g = await gate();
   if (!g.staff) return g.stop;
 
-  const { data, error } = await serviceClient().from("service_health").select("*").order("name");
+  const [{ data, error }, speed] = await Promise.all([
+    serviceClient().from("service_health").select("*").order("name"),
+    serviceClient().from("admin_timings").select("*"),
+  ]);
   const rows = (data ?? []) as Row[];
   const now = requestTime();
   const newest = rows.reduce((t, r) => Math.max(t, new Date(r.checked_at).getTime()), 0);
@@ -160,6 +163,82 @@ export default async function HealthPage() {
           </Card>
         </>
       )}
+
+      <Speed rows={(speed.data ?? []) as Timing[]} error={speed.error?.message ?? null} />
     </Shell>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Speed (3 November 2026)                                                    */
+/* -------------------------------------------------------------------------- */
+
+/** One step's durations over 7 days, from the API's timings (migration 0064). */
+type Timing = { step: string; n: number; p50_ms: number; p90_ms: number; max_ms: number };
+
+/** What each step is, in words, in the order people meet them. */
+const STEPS: { step: string; label: string }[] = [
+  { step: "reply.first", label: "First reply, from their message" },
+  { step: "handle.total", label: "Whole message, start to finish" },
+  { step: "ai.parse", label: "AI reading a typed message" },
+  { step: "render.card", label: "Drawing a card" },
+  { step: "render.pdf", label: "Drawing a PDF" },
+  { step: "wa.upload", label: "Uploading to WhatsApp" },
+  { step: "wa.send", label: "WhatsApp accepting a message" },
+];
+
+const ms = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)} s` : `${v} ms`);
+
+function Speed({ rows, error }: { rows: Timing[]; error: string | null }) {
+  const by = new Map(rows.map((r) => [r.step, r]));
+  const known = STEPS.filter((s) => by.has(s.step));
+  const forms = rows.filter((r) => r.step.startsWith("flow.")).sort((a, b) => b.n - a.n);
+  const hit = by.get("pdf.prepared.hit")?.n ?? 0;
+  const miss = by.get("pdf.prepared.miss")?.n ?? 0;
+  const line = (label: string, r: Timing) => (
+    <tr key={r.step} className={table.row}>
+      <td className={table.td}>{label}</td>
+      <td className={`${table.td} text-right`}>{r.n.toLocaleString("en-GB")}</td>
+      <td className={`${table.td} text-right font-medium`}>{ms(r.p50_ms)}</td>
+      <td className={`${table.td} text-right ${r.p90_ms > 4000 ? "text-clay" : ""}`}>{ms(r.p90_ms)}</td>
+      <td className={`${table.td} text-right text-ink/50`}>{ms(r.max_ms)}</td>
+    </tr>
+  );
+  return (
+    <>
+      <SectionTitle title="Speed" sub="How long each step takes, last 7 days. Typical is the middle; slow is the slowest tenth." />
+      {error ? (
+        <Failed what="speed" error={error} />
+      ) : !rows.length ? (
+        <Card>
+          <Empty icon="zap">Nothing timed yet. Timings start with the API update that adds them.</Empty>
+        </Card>
+      ) : (
+        <Card flush>
+          <div className={table.wrap}>
+            <table className={`${table.table} min-w-140`}>
+              <thead className={table.head}>
+                <tr>
+                  <th className={table.th}>Step</th>
+                  <th className={`${table.th} text-right`}>Times</th>
+                  <th className={`${table.th} text-right`}>Typical</th>
+                  <th className={`${table.th} text-right`}>Slow</th>
+                  <th className={`${table.th} text-right`}>Worst</th>
+                </tr>
+              </thead>
+              <tbody className="tabular-nums">
+                {known.map((s) => line(s.label, by.get(s.step)!))}
+                {forms.map((r) => line(`Form step: ${r.step.slice(5).toLowerCase()}`, r))}
+              </tbody>
+            </table>
+          </div>
+          {hit + miss > 0 && (
+            <p className="border-t border-line px-4 py-3 text-xs text-ink/50 sm:px-5">
+              PDFs ready before “Send it”: {hit} of {hit + miss} ({Math.round((100 * hit) / (hit + miss))}%).
+            </p>
+          )}
+        </Card>
+      )}
+    </>
   );
 }

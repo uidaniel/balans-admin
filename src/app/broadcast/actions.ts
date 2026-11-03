@@ -83,7 +83,7 @@ export async function sendToEveryone(form: FormData): Promise<void> {
   }
 
   const db = serviceClient();
-  // Everybody it goes to: finished setup, active, and not opted out.
+  // Everybody it goes to: finished setup, active, said yes to updates, not since said stop.
   const users: { id: string; wa_phone: string; email: string | null; email_verified_at: string | null }[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await db
@@ -92,6 +92,7 @@ export async function sendToEveryone(form: FormData): Promise<void> {
       .is("deleted_at", null)
       .eq("status", "active")
       .not("consented_at", "is", null)
+      .not("updates_opt_in_at", "is", null)
       .is("updates_off_at", null)
       .order("id")
       .range(from, from + 999);

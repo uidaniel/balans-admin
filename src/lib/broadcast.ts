@@ -65,7 +65,11 @@ const COUNTS = [
   "email_pending",
 ] as const;
 
-/** Users an announcement goes to: finished setup, active, and not opted out. */
+/**
+ * Users an announcement goes to: finished setup, active, said yes to updates
+ * and not since said stop (API migrations 0061, 0065). The yes is the box at
+ * setup, the one-time question after an invoice, or START UPDATES.
+ */
 export const audienceQuery = () =>
   serviceClient()
     .from("users")
@@ -73,6 +77,7 @@ export const audienceQuery = () =>
     .is("deleted_at", null)
     .eq("status", "active")
     .not("consented_at", "is", null)
+    .not("updates_opt_in_at", "is", null)
     .is("updates_off_at", null);
 
 export async function loadBroadcastPage(): Promise<BroadcastPage> {

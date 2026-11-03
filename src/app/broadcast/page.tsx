@@ -66,7 +66,7 @@ export default async function BroadcastPage({
         />
         {page.audience.data ? (
           <>
-            <Stat icon="users" label="Will get WhatsApp" value={fmt(page.audience.data.people)} note="Finished setup, not opted out" />
+            <Stat icon="users" label="Will get WhatsApp" value={fmt(page.audience.data.people)} note="Said yes to updates, and not since said stop" />
             <Stat icon="mail" label="Will get email" value={fmt(page.audience.data.emails)} note="Confirmed addresses only" />
           </>
         ) : (
