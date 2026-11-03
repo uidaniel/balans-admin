@@ -2,26 +2,23 @@ import { serviceClient } from "@/lib/supabase";
 import type { Loaded } from "@/lib/dashboard";
 
 /*
- * What the Broadcast page reads.
+ * What the Broadcast page reads (3 November 2026: messages to every user;
+ * the waitlist's launch message is retired now Balans is live).
  *
- * The copy comes from the API, which writes it to `config` at boot as
- * `broadcast.<campaign>`: the admin is another application and cannot import
- * the file the message is built from, and a preview typed out a second time
- * here would drift from what people actually receive. Template statuses come
- * the same way, as `template_status`, because only the API holds a Meta key.
+ * The admin never sends. It writes a broadcast with its words and one row per
+ * user (API migrations 0029, 0061); the API sends them: free-form to anybody
+ * inside WhatsApp's 24-hour window, the `announcement` template to everybody
+ * else once Meta approves it, and email to confirmed addresses. Template
+ * statuses come from `config`, written by the API, which holds the Meta key.
  */
 
-export const CAMPAIGN = "launch_setup";
+export const ANNOUNCE = "announcement";
 
 /** Where a test goes unless somebody types another number. */
 export const DEFAULT_TEST_PHONE = "08107408438";
 
-export type Campaign = {
-  campaign: string;
-  image: string;
-  whatsapp: { body: string; footer: string; button: string; opens: string };
-  email: { subject: string; html: string };
-};
+/** WhatsApp carries one paragraph in the template, and Meta caps the body. */
+export const MAX_MESSAGE = 700;
 
 export type BroadcastRow = {
   id: string;
@@ -48,13 +45,10 @@ export type BroadcastRow = {
   email_error: string | null;
 };
 
-export type Audience = { people: number; phones: number; emails: number };
+export type Audience = { people: number; emails: number };
 
 export type BroadcastPage = {
-  campaign: Campaign | null;
-  /** Still to send this campaign to; null when it could not be counted. */
-  unsent: number | null;
-  /** Meta's word for it: APPROVED, PENDING, REJECTED, or null if unknown. */
+  /** Meta's word for the announcement template: APPROVED, PENDING, REJECTED, or null. */
   templateStatus: string | null;
   statusCheckedAt: string | null;
   audience: Loaded<Audience>;
@@ -71,37 +65,35 @@ const COUNTS = [
   "email_pending",
 ] as const;
 
+/** Users an announcement goes to: finished setup, active, and not opted out. */
+export const audienceQuery = () =>
+  serviceClient()
+    .from("users")
+    .select("id", { count: "exact", head: true })
+    .is("deleted_at", null)
+    .eq("status", "active")
+    .not("consented_at", "is", null)
+    .is("updates_off_at", null);
+
 export async function loadBroadcastPage(): Promise<BroadcastPage> {
   const db = serviceClient();
-  const live = () => db.from("waitlist").select("id", { count: "exact", head: true }).is("unsubscribed_at", null);
-
-  const [config, people, phones, emails, history, unsent] = await Promise.all([
-    db.from("config").select("key, value_json, updated_at").in("key", [`broadcast.${CAMPAIGN}`, "template_status"]),
-    live(),
-    live().not("phone", "is", null),
-    live().not("email", "is", null),
-    db.from("admin_broadcasts").select("*").eq("campaign", CAMPAIGN).order("created_at", { ascending: false }).limit(30),
-    // Who this campaign has not gone to yet, oldest first (migration 0041).
-    db.rpc("waitlist_unsent", { p_campaign: CAMPAIGN }).select("id"),
+  const [config, people, emails, history] = await Promise.all([
+    db.from("config").select("key, value_json, updated_at").eq("key", "template_status"),
+    audienceQuery(),
+    audienceQuery().not("email_verified_at", "is", null),
+    db.from("admin_broadcasts").select("*").eq("campaign", ANNOUNCE).order("created_at", { ascending: false }).limit(30),
   ]);
 
-  const rows = config.data ?? [];
-  const campaign = (rows.find((r) => r.key === `broadcast.${CAMPAIGN}`)?.value_json ?? null) as Campaign | null;
-  const statuses = rows.find((r) => r.key === "template_status");
-  const templateStatus = ((statuses?.value_json as Record<string, string> | undefined)?.[CAMPAIGN] ?? null) as
-    | string
-    | null;
-
-  const countError = people.error ?? phones.error ?? emails.error;
+  const statuses = (config.data ?? [])[0];
+  const templateStatus = ((statuses?.value_json as Record<string, string> | undefined)?.[ANNOUNCE] ?? null) as string | null;
+  const countError = people.error ?? emails.error;
 
   return {
-    campaign,
     templateStatus,
-    unsent: unsent.error ? null : ((unsent.data ?? []) as unknown[]).length,
     statusCheckedAt: (statuses?.updated_at as string | undefined) ?? null,
     audience: countError
       ? { data: null, error: countError.message }
-      : { data: { people: people.count ?? 0, phones: phones.count ?? 0, emails: emails.count ?? 0 }, error: null },
+      : { data: { people: people.count ?? 0, emails: emails.count ?? 0 }, error: null },
     history: history.error
       ? { data: null, error: history.error.message }
       : {
@@ -116,8 +108,8 @@ export async function loadBroadcastPage(): Promise<BroadcastPage> {
 }
 
 /**
- * A Nigerian number in the shape the waitlist stores: +234 and ten digits.
- * Also takes a full international number starting with +. Null if neither.
+ * A Nigerian number in the shape the recipients table stores: +234 and ten
+ * digits. Also takes a full international number starting with +. Null if neither.
  */
 export function normalisePhone(input: string): string | null {
   const raw = input.trim();

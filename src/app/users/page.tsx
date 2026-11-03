@@ -1,6 +1,6 @@
 import { naira, shortDate } from "@/lib/money";
 import Link from "next/link";
-import { countUnfinished, loadAccounts, loadPaidTo, loadUnverifiedSubaccounts, type AccountSort } from "@/lib/dashboard";
+import { countUnfinished, loadAccounts, loadPaidTo, loadSourceMap, loadUnverifiedSubaccounts, type AccountSort } from "@/lib/dashboard";
 import { Avatar, Card, Empty, Notice, Pill, Segmented, Stat, btn, fieldWithIcon, statGrid, table } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { serviceClient } from "@/lib/supabase";
@@ -37,12 +37,14 @@ export default async function UsersPage({
   const q = (params.q ?? "").slice(0, 80);
   const sort = (SORTS.find((s) => s.id === params.sort)?.id ?? "invoiced") as AccountSort;
   const all = params.all === "1";
-  const [accounts, pros, paidTo, unfinished] = await Promise.all([
+  const [accounts, pros, paidTo, unfinished, sources] = await Promise.all([
     loadAccounts(q, sort, !all),
     // Only Pro accounts have an end date worth showing, and there are few of them.
     serviceClient().from("users").select("id, plan_expires_at").eq("plan", "pro"),
     loadPaidTo(),
     countUnfinished(q),
+    // Where each came from (3 November 2026); see loadSources.
+    loadSourceMap(),
   ]);
   const unverified = await loadUnverifiedSubaccounts();
   const toVerify = new Set((unverified.data ?? []).map((u) => u.userId));
@@ -205,7 +207,9 @@ export default async function UsersPage({
                         inline
                       />
                     </div>
-                    <p className="mt-2 text-[0.7rem] text-ink/40">Joined {shortDate(a.created_at)}</p>
+                    <p className="mt-2 text-[0.7rem] text-ink/40">
+                      Joined {shortDate(a.created_at)} · via {sources.get(a.id) ?? "Before tracking"}
+                    </p>
                   </div>
                 </li>
               );
@@ -220,6 +224,7 @@ export default async function UsersPage({
                   <th className={table.th}>Contact</th>
                   <th className={table.th}>Plan</th>
                   <th className={table.th}>Joined</th>
+                  <th className={table.th}>Source</th>
                   <th className={table.th}>Last active</th>
                   <th className={`${table.th} text-right`}>Invoices</th>
                   <th className={`${table.th} text-right`}>Invoiced</th>
@@ -267,6 +272,7 @@ export default async function UsersPage({
                         />
                       </td>
                       <td className={`${table.td} whitespace-nowrap text-ink/60`}>{shortDate(a.created_at)}</td>
+                      <td className={`${table.td} max-w-48 truncate text-ink/60`}>{sources.get(a.id) ?? "Before tracking"}</td>
                       <td className={`${table.td} whitespace-nowrap text-ink/60`}>
                         {a.last_active_at ? shortDate(a.last_active_at) : "—"}
                       </td>

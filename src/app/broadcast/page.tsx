@@ -1,4 +1,4 @@
-import { CAMPAIGN, DEFAULT_TEST_PHONE, loadBroadcastPage, type BroadcastRow } from "@/lib/broadcast";
+import { DEFAULT_TEST_PHONE, MAX_MESSAGE, loadBroadcastPage, type BroadcastRow } from "@/lib/broadcast";
 import { Card, Empty, Notice, Pill, Stat, btn, field, table, type PillTone } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { Failed, gate, Shell } from "../shell";
@@ -8,12 +8,11 @@ import { RefreshWhile } from "./refresh";
 export const dynamic = "force-dynamic";
 
 /**
- * The launch message: what it looks like, a test to your own phone, and the
- * send to everyone on the waitlist.
+ * A message to every user, on WhatsApp and by email (3 November 2026). The
+ * waitlist's launch message is retired: Balans is live.
  *
- * The preview is drawn from the copy the API publishes, so it is the message,
- * not a picture of it. The test goes through the same sender as the real
- * thing, with one recipient.
+ * One form: write it, test it on your own phone, then send it to everybody,
+ * typed SEND to confirm. The API does the sending (see lib/broadcast.ts).
  */
 export default async function BroadcastPage({
   searchParams,
@@ -28,8 +27,6 @@ export default async function BroadcastPage({
   const history = page.history.data ?? [];
   const approved = page.templateStatus === "APPROVED";
   const busy = history.some((b) => b.status === "queued" || b.status === "sending");
-  // Everyone has had it: nothing left to send (sent in batches, oldest first).
-  const alreadySent = page.unsent === 0;
   const isAdmin = g.staff.role === "admin";
 
   return (
@@ -37,7 +34,7 @@ export default async function BroadcastPage({
       email={g.staff.email}
       current="/broadcast"
       title="Broadcast"
-      sub="The “we're live” message to the waitlist, on WhatsApp and by email. Test it on your own phone first."
+      sub="A message to every user, on WhatsApp and by email. Test it on your own phone first."
     >
       <RefreshWhile active={busy} />
 
@@ -49,128 +46,103 @@ export default async function BroadcastPage({
       {params.queued && !params.error && (
         <Notice tone="moss" role="status" className="mb-4">
           {params.queued === "test"
-            ? "Test queued. It goes out within about 15 seconds — watch your phone and the history below."
-            : "Queued for the whole waitlist. Progress shows below and updates by itself."}
+            ? "Test queued. It goes out within about 15 seconds: watch your phone and the history below."
+            : "Queued for every user. Progress shows below and updates by itself."}
         </Notice>
       )}
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
         <Stat
           className="col-span-2 xl:col-span-1"
           icon="shield"
           label="WhatsApp template"
-          value={page.templateStatus ? title(page.templateStatus) : "Unknown"}
+          value={page.templateStatus ? title(page.templateStatus) : "Not submitted yet"}
           tone={approved ? "moss" : page.templateStatus === "REJECTED" ? "clay" : undefined}
           note={
             approved
-              ? "Meta approved it. It can reach anyone on the list."
-              : "Waiting on Meta. Until then a test only reaches a phone that messaged Balans in the last 24 hours."
+              ? "Approved: reaches everyone, in or out of a chat."
+              : "Until Meta approves it, WhatsApp reaches only people who messaged Balans in the last 24 hours."
           }
         />
         {page.audience.data ? (
           <>
-            <Stat className="col-span-2 xl:col-span-1" icon="users" label="On the waitlist" value={fmt(page.audience.data.people)} note="Not counting unsubscribed" />
-            <Stat icon="message" label="Will get WhatsApp" value={fmt(page.audience.data.phones)} />
-            <Stat icon="mail" label="Will get email" value={fmt(page.audience.data.emails)} />
+            <Stat icon="users" label="Will get WhatsApp" value={fmt(page.audience.data.people)} note="Finished setup, not opted out" />
+            <Stat icon="mail" label="Will get email" value={fmt(page.audience.data.emails)} note="Confirmed addresses only" />
           </>
         ) : (
-          <div className="col-span-2 xl:col-span-3">
-            <Failed what="the waitlist" error={page.audience.error ?? "unknown"} />
+          <div className="col-span-2">
+            <Failed what="the audience" error={page.audience.error ?? "unknown"} />
           </div>
         )}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-        <Card title="What they will see" sub="Exactly as it will arrive">
-          {page.campaign ? (
-            <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-              <WhatsAppPreview c={page.campaign} />
-              <div>
-                <p className="mb-2 text-[0.82rem] font-medium text-ink/60">Email</p>
-                <p className="mb-2 text-sm">
-                  <span className="text-ink/50">Subject:</span> <strong className="font-medium">{page.campaign.email.subject}</strong>
-                </p>
-                <iframe
-                  title="Email preview"
-                  srcDoc={page.campaign.email.html}
-                  sandbox=""
-                  className="h-[520px] w-full rounded-2xl border border-line bg-cream sm:h-[560px]"
-                />
-              </div>
-            </div>
-          ) : (
-            <Empty icon="message">
-              The API has not published the campaign yet. It does that when it starts — this appears after its next deploy.
-            </Empty>
-          )}
+      {!isAdmin ? (
+        <Card title="Write a message">
+          <p className="text-sm text-ink/65">Only an admin can send messages to users.</p>
         </Card>
-
-        <div className="flex flex-col gap-4">
-          <Card title="Send a test" sub="One person, through the real sender">
-            <form action={sendTest} className="space-y-3">
-              <Field label="WhatsApp number" name="phone" defaultValue={DEFAULT_TEST_PHONE} placeholder="0810 740 8438" />
-              <Field label="Email (optional)" name="email" type="email" placeholder="you@example.com" />
-              {!approved && (
-                <p className="rounded-2xl bg-[#fdf3dc] px-3.5 py-2.5 text-xs leading-relaxed text-[#6b4800]">
-                  Until Meta approves the template, WhatsApp only lets Balans message a number that wrote to it in the last
-                  24 hours. Send “hi” to Balans from this phone first, then press Send test.
-                </p>
-              )}
-              <button type="submit" className={btn.primary}>
-                <Icon name="send" className="size-4 text-marigold" />
-                Send test
-              </button>
-            </form>
+      ) : (
+        <form className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+          <Card title="Write a message" sub="Plain words. WhatsApp adds “Reply STOP UPDATES”; email adds an unsubscribe link">
+            <div className="space-y-3">
+              <Field label="Email subject" name="subject" placeholder="What's new on Balans" />
+              <label className="block">
+                <span className="text-[0.82rem] font-medium text-ink/60">Message</span>
+                <textarea
+                  name="message"
+                  required
+                  maxLength={MAX_MESSAGE}
+                  rows={7}
+                  placeholder="Balans now sends a summary of your month on the 1st…"
+                  className={`mt-1.5 ${field} h-auto py-3 leading-relaxed`}
+                />
+                <span className="mt-1 block text-xs text-ink/45">
+                  Up to {MAX_MESSAGE} characters. Outside a 24-hour chat WhatsApp sends it as one paragraph, through the
+                  approved template; email keeps your paragraphs.
+                </span>
+              </label>
+              <fieldset className="flex flex-wrap gap-4 pt-1 text-sm">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" name="whatsapp" defaultChecked className="size-4 accent-[#10231c]" /> WhatsApp
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" name="email" defaultChecked className="size-4 accent-[#10231c]" /> Email
+                </label>
+              </fieldset>
+            </div>
           </Card>
 
-          <Card title="Send to the waitlist" sub="Oldest sign-ups first, in as many batches as you like">
-            {alreadySent ? (
-              <p className="text-sm leading-relaxed text-ink/65">
-                Everyone on the waitlist has had this — see the history below. Nobody is ever sent it twice.
-              </p>
-            ) : !isAdmin ? (
-              <p className="text-sm text-ink/65">Only an admin can send to the whole waitlist.</p>
-            ) : (
-              <form action={sendToEveryone} className="space-y-3">
+          <div className="flex flex-col gap-4">
+            <Card title="Send a test" sub="To you, through the real sender">
+              <div className="space-y-3">
+                <Field label="WhatsApp number" name="phone" defaultValue={DEFAULT_TEST_PHONE} placeholder="0810 740 8438" />
+                <Field label="Email (optional)" name="email_to" type="email" placeholder="you@example.com" />
+                <button type="submit" formAction={sendTest} className={btn.primary}>
+                  <Icon name="send" className="size-4 text-marigold" />
+                  Send test
+                </button>
+              </div>
+            </Card>
+
+            <Card title="Send to every user" sub="Everyone who finished setup and has not opted out">
+              <div className="space-y-3">
                 <p className="text-sm leading-relaxed text-ink/65">
-                  {page.unsent === null ? "Some people" : fmt(page.unsent)} of{" "}
-                  {page.audience.data ? fmt(page.audience.data.people) : "the waitlist"} have not had it yet. It goes to the
-                  earliest sign-ups first: WhatsApp to each number, email to each address. Nobody already sent to is sent
-                  it again. This cannot be undone.
+                  {page.audience.data ? `${fmt(page.audience.data.people)} people` : "Every user"} on WhatsApp
+                  {page.audience.data ? `, ${fmt(page.audience.data.emails)} by email` : ""}. Outside a 24-hour chat WhatsApp
+                  charges a marketing rate per message. This cannot be undone.
                 </p>
-                <label className="block">
-                  <span className="text-[0.82rem] font-medium text-ink/60">How many (blank = everyone still waiting)</span>
-                  <input
-                    name="count"
-                    type="number"
-                    min={1}
-                    inputMode="numeric"
-                    placeholder={page.unsent === null ? "All" : `All ${fmt(page.unsent)}`}
-                    disabled={!approved}
-                    className={`mt-1.5 ${field}`}
-                  />
-                </label>
                 <label className="block">
                   <span className="text-[0.82rem] font-medium text-ink/60">Type SEND to confirm</span>
-                  <input
-                    name="confirm"
-                    autoComplete="off"
-                    disabled={!approved}
-                    className={`mt-1.5 font-mono tracking-widest uppercase ${field}`}
-                  />
+                  <input name="confirm" autoComplete="off" className={`mt-1.5 font-mono tracking-widest uppercase ${field}`} />
                 </label>
-                <button type="submit" disabled={!approved} className={btn.accent}>
+                <button type="submit" formAction={sendToEveryone} className={btn.accent}>
                   <Icon name="zap" className="size-4" />
-                  Send
+                  Send to everyone
                 </button>
-                {!approved && (
-                  <p className="text-xs text-ink/50">Unlocks when Meta approves the template. This page checks every few minutes.</p>
-                )}
-              </form>
-            )}
-          </Card>
-        </div>
-      </div>
+              </div>
+            </Card>
+          </div>
+        </form>
+      )}
 
       <div className="mt-4">
         <Card title="History" sub="Tests and sends, newest first" flush>
@@ -232,7 +204,7 @@ function HistoryCard({ b }: { b: BroadcastRow }) {
     <li className={table.item}>
       <div className="flex flex-wrap items-center gap-1.5">
         <Pill tone={b.kind === "live" ? "ink" : "neutral"} dot={false}>
-          {b.kind === "live" ? "Waitlist" : "Test"}
+          {b.kind === "live" ? "All users" : "Test"}
         </Pill>
         <Pill tone={TONE[b.status]}>{title(b.status)}</Pill>
         <span className="ml-auto text-xs text-ink/45 tabular-nums">{when(b.created_at)}</span>
@@ -280,7 +252,7 @@ function HistoryRow({ b }: { b: BroadcastRow }) {
       </td>
       <td className={table.td}>
         <Pill tone={b.kind === "live" ? "ink" : "neutral"} dot={false}>
-          {b.kind === "live" ? "Waitlist" : "Test"}
+          {b.kind === "live" ? "All users" : "Test"}
         </Pill>
       </td>
       <td className={table.td}>
@@ -318,44 +290,6 @@ function Counts({ sent, failed, pending }: { sent: number; failed: number; pendi
       {failed > 0 && <span className="text-clay"> · {fmt(failed)} failed</span>}
       {pending > 0 && <span className="text-ink/50"> · {fmt(pending)} to go</span>}
     </p>
-  );
-}
-
-/** A WhatsApp message bubble: header image, body with *bold*, footer, one link button. */
-function WhatsAppPreview({ c }: { c: NonNullable<Awaited<ReturnType<typeof loadBroadcastPage>>["campaign"]> }) {
-  return (
-    <div>
-      <p className="mb-2 text-[0.82rem] font-medium text-ink/60">WhatsApp</p>
-      <div className="rounded-[20px] bg-[#efe7dd] p-3 sm:p-5">
-        <div className="max-w-[340px] overflow-hidden rounded-xl rounded-tl-sm bg-white shadow-[0_1px_1px_rgba(0,0,0,0.12)]">
-          <div className="p-1">
-            {/* eslint-disable-next-line @next/next/no-img-element -- the published poster, exactly as sent */}
-            <img src={c.image} alt="The launch poster" className="block w-full rounded-lg" />
-          </div>
-          <div className="px-2.5 pt-1.5 pb-1 text-[0.9rem] leading-snug whitespace-pre-wrap text-[#111b21]">
-            {bold(c.whatsapp.body)}
-          </div>
-          <div className="flex items-end justify-between gap-2 px-2.5 pb-1.5">
-            <p className="text-[0.78rem] text-[#667781]">{c.whatsapp.footer}</p>
-            <p className="shrink-0 text-[0.68rem] text-[#667781]">{lagosTime()}</p>
-          </div>
-          <p className="flex items-center justify-center gap-1.5 border-t border-[#e9edef] py-2.5 text-[0.9rem] font-medium text-[#0a7cff]">
-            <Icon name="file" className="size-4" />
-            {c.whatsapp.button}
-          </p>
-        </div>
-        <p className="mt-3 text-xs text-ink/45">Button opens: {c.whatsapp.opens}</p>
-      </div>
-      <p className="mt-2 text-xs text-ink/45">
-        Template: <span className="font-mono">{CAMPAIGN}</span>
-      </p>
-    </div>
-  );
-}
-
-function bold(text: string): React.ReactNode[] {
-  return text.split(/(\*[^*\n]+\*)/g).map((part, i) =>
-    part.startsWith("*") && part.endsWith("*") && part.length > 2 ? <strong key={i}>{part.slice(1, -1)}</strong> : part,
   );
 }
 
@@ -397,10 +331,4 @@ function when(iso: string): string {
     minute: "2-digit",
     timeZone: "Africa/Lagos",
   }).format(new Date(iso));
-}
-
-function lagosTime(): string {
-  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" }).format(
-    new Date(),
-  );
 }

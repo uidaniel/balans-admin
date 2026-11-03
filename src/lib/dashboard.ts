@@ -533,3 +533,241 @@ export async function loadUnverifiedSubaccounts(): Promise<Loaded<{ userId: stri
     error: null,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Where sign-ups come from (3 November 2026)                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Recorded by the bot from each person's first message (API migration 0060):
+ * a Click-to-WhatsApp ad or boosted post (Meta's referral), the website's chat
+ * buttons ("Hi Balans", with a ?ref), the waitlist's launch message, or
+ * anything else. Null for everybody before it was recorded.
+ */
+export const SOURCE_NAME: Record<string, string> = {
+  ad: "Ads",
+  post: "Boosted posts",
+  instagram: "Instagram",
+  whatsapp: "Shared on WhatsApp",
+  x: "X",
+  facebook: "Facebook",
+  invoice: "From invoices",
+  website: "Website",
+  waitlist: "Waitlist",
+  direct: "Direct",
+  none: "Before tracking",
+};
+
+/**
+ * Our link tags, each a channel of its own (3 November 2026). The bot stores
+ * them as a website ref, from "Hi Balans (ref: ig)", whether the person came
+ * through the website's chat button or straight in by balans.ng/start?ref=ig
+ * (the Instagram bio, a status, a group): either way it is that channel.
+ */
+const TAGS: Record<string, { source: string; label: string }> = {
+  ig: { source: "instagram", label: "Instagram" },
+  status: { source: "whatsapp", label: "WhatsApp status" },
+  groups: { source: "whatsapp", label: "WhatsApp groups" },
+  wa: { source: "whatsapp", label: "WhatsApp" },
+  channel: { source: "whatsapp", label: "WhatsApp channel" },
+  x: { source: "x", label: "X" },
+  fb: { source: "facebook", label: "Facebook" },
+  // "Made with Balans" on a free invoice, tapped by the client (API 0063).
+  invoice: { source: "invoice", label: "Made with Balans on an invoice" },
+};
+
+const tagOf = (source: string | null, detail: string | null) =>
+  source === "website" && detail ? TAGS[detail.toLowerCase()] : undefined;
+
+/** The row a sign-up counts under: a tagged link is its channel, not "Website". */
+const channelOf = (source: string | null, detail: string | null): string => tagOf(source, detail)?.source ?? source ?? "none";
+
+/** "Ad: Get paid on WhatsApp", "WhatsApp status", "Website · promo", "Direct". */
+export function sourceLabel(source: string | null, detail: string | null): string {
+  if (!source) return SOURCE_NAME.none!;
+  const tag = tagOf(source, detail);
+  if (tag) return tag.label;
+  if ((source === "ad" || source === "post") && detail) return `${source === "ad" ? "Ad" : "Post"}: ${detail}`;
+  if (source === "website" && detail) return `Website · ${detail}`;
+  return SOURCE_NAME[source] ?? source;
+}
+
+/** `clicks` is taps on our tagged links (API migration 0062); null where there is no link to tap. */
+export type SourceRow = { source: string; clicks: number | null; signedUp: number; finished: number; sent: number; paid: number; pro: number };
+export type SourceDetail = { label: string; clicks: number | null; signedUp: number; finished: number; sent: number };
+export type Sources = { rows: SourceRow[]; detail: SourceDetail[] };
+
+type SourceUser = { id: string; signup_source: string | null; signup_detail: string | null; consented_at: string | null; plan: string | null };
+
+/** Each user's source, for the Users page. */
+export async function loadSourceMap(): Promise<Map<string, string>> {
+  const sb = serviceClient();
+  const { rows } = await allRows<SourceUser>((a, b) =>
+    sb.from("users").select("id, signup_source, signup_detail").is("deleted_at", null).order("id").range(a, b),
+  );
+  return new Map(rows.map((u) => [u.id, sourceLabel(u.signup_source, u.signup_detail)]));
+}
+
+/**
+ * Sign-ups per source, and how far each got: finished setup, sent an
+ * invoice, got paid, went Pro. The point is which channel brings people who
+ * stay, not only who taps. Ads and website refs are broken down by name.
+ */
+export async function loadSources(): Promise<Loaded<Sources>> {
+  const sb = serviceClient();
+  const [users, accounts, taps] = await Promise.all([
+    allRows<SourceUser>((a, b) =>
+      sb.from("users").select("id, signup_source, signup_detail, consented_at, plan").is("deleted_at", null).order("id").range(a, b),
+    ),
+    allRows<{ id: string; invoices: number; invoices_paid: number }>((a, b) =>
+      sb.from("admin_accounts").select("id, invoices, invoices_paid").order("id").range(a, b),
+    ),
+    sb.from("admin_link_clicks").select("ref, clicks"),
+  ]);
+  const error = users.error ?? accounts.error;
+  if (error) return { data: null, error };
+
+  const docs = new Map(accounts.rows.map((r) => [r.id, r]));
+  const by = new Map<string, SourceRow>();
+  const detail = new Map<string, SourceDetail>();
+  const blank = (source: string): SourceRow => ({ source, clicks: null, signedUp: 0, finished: 0, sent: 0, paid: 0, pro: 0 });
+  for (const u of users.rows) {
+    const key = channelOf(u.signup_source, u.signup_detail);
+    const row = by.get(key) ?? blank(key);
+    const d = docs.get(u.id);
+    const finished = Boolean(u.consented_at);
+    const sent = Number(d?.invoices ?? 0) > 0;
+    row.signedUp += 1;
+    if (finished) row.finished += 1;
+    if (sent) row.sent += 1;
+    if (Number(d?.invoices_paid ?? 0) > 0) row.paid += 1;
+    if (u.plan === "pro") row.pro += 1;
+    by.set(key, row);
+    if (u.signup_detail && (key === "ad" || key === "post" || key === "whatsapp" || key === "website")) {
+      const label = sourceLabel(u.signup_source, u.signup_detail);
+      const x = detail.get(label) ?? { label, clicks: null, signedUp: 0, finished: 0, sent: 0 };
+      x.signedUp += 1;
+      if (finished) x.finished += 1;
+      if (sent) x.sent += 1;
+      detail.set(label, x);
+    }
+  }
+  // Taps on the tagged links, under the same rows. Plain /start is the launch
+  // message's button; an untagged ref is a website one. Missing until 0062 is
+  // live, so a failure here only leaves the column empty.
+  for (const t of (taps.data ?? []) as { ref: string; clicks: number }[]) {
+    const ref = t.ref.toLowerCase();
+    const key = ref === "launch" ? "waitlist" : channelOf("website", ref);
+    const row = by.get(key) ?? blank(key);
+    row.clicks = (row.clicks ?? 0) + Number(t.clicks);
+    by.set(key, row);
+    if (key === "whatsapp" || key === "website") {
+      const label = sourceLabel("website", ref);
+      const x = detail.get(label) ?? { label, clicks: null, signedUp: 0, finished: 0, sent: 0 };
+      x.clicks = (x.clicks ?? 0) + Number(t.clicks);
+      detail.set(label, x);
+    }
+  }
+  const order = ["ad", "post", "instagram", "whatsapp", "x", "facebook", "invoice", "website", "waitlist", "direct", "none"];
+  return {
+    data: {
+      rows: [...by.values()].sort((a, b) => order.indexOf(a.source) - order.indexOf(b.source)),
+      detail: [...detail.values()].sort((a, b) => b.signedUp - a.signedUp || (b.clicks ?? 0) - (a.clicks ?? 0)).slice(0, 10),
+    },
+    error: null,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Whether people stay (API migration 0063, 3 November 2026)                  */
+/* -------------------------------------------------------------------------- */
+
+/** One Monday-to-Sunday week: businesses that sent a document, and setups finished. */
+export type Week = { week: string; active: number; documents: number; new_users: number };
+
+/** Businesses that sent a document: the last 7 days, the 7 before, and 30. */
+export type Active = { active_7d: number; active_prev_7d: number; active_30d: number };
+
+/**
+ * People who finished setup in one week, and how many sent a document in
+ * their week 0 (first seven days), 1, 2, 3, 4, 6 and 8. A week at or past
+ * `weeks_complete` is still filling in.
+ */
+export type Cohort = {
+  week: string;
+  users: number;
+  weeks_complete: number;
+  w0: number;
+  w1: number;
+  w2: number;
+  w3: number;
+  w4: number;
+  w6: number;
+  w8: number;
+};
+
+/** How fast people get going. Each share is out of those who have had the time. */
+export type Activation = {
+  median_minutes_to_setup: number | null;
+  median_minutes_to_first_doc: number | null;
+  median_hours_to_first_paid: number | null;
+  set_up_1d: number;
+  first_doc_1d: number;
+  set_up_7d: number;
+  first_doc_7d: number;
+  set_up_30d: number;
+  first_paid_30d: number;
+  never_sent: number;
+};
+
+/** Clients who opened an invoice, tapped "Made with Balans", and signed up. */
+export type InvoiceLoop = { opened_30d: number; opened_total: number; taps: number; messaged: number; finished: number };
+
+export async function loadWeekly(): Promise<Loaded<Week[]>> {
+  const { data, error } = await serviceClient().from("admin_weekly").select("*").order("week");
+  if (error || !data) return { data: null, error: error?.message ?? "no rows" };
+  return { data: data.map((r) => numeric<Week>(r, ["week"])), error: null };
+}
+
+export async function loadActive(): Promise<Loaded<Active>> {
+  const { data, error } = await serviceClient().from("admin_active").select("*").single();
+  if (error || !data) return { data: null, error: error?.message ?? "no row" };
+  return { data: numeric<Active>(data, []), error: null };
+}
+
+export async function loadCohorts(): Promise<Loaded<Cohort[]>> {
+  const { data, error } = await serviceClient().from("admin_cohorts").select("*").order("week", { ascending: false });
+  if (error || !data) return { data: null, error: error?.message ?? "no rows" };
+  return { data: data.map((r) => numeric<Cohort>(r, ["week"])), error: null };
+}
+
+export async function loadActivation(): Promise<Loaded<Activation>> {
+  const { data, error } = await serviceClient().from("admin_activation").select("*").single();
+  if (error || !data) return { data: null, error: error?.message ?? "no row" };
+  // The medians stay null when nobody has got there yet, rather than reading 0.
+  const medians = ["median_minutes_to_setup", "median_minutes_to_first_doc", "median_hours_to_first_paid"];
+  const out = numeric<Activation>(data, medians);
+  for (const k of medians) {
+    const v = (data as Record<string, unknown>)[k];
+    (out as Record<string, unknown>)[k] = v === null || v === undefined ? null : Number(v);
+  }
+  return { data: out, error: null };
+}
+
+export async function loadInvoiceLoop(): Promise<Loaded<InvoiceLoop>> {
+  const { data, error } = await serviceClient().from("admin_invoice_loop").select("*").single();
+  if (error || !data) return { data: null, error: error?.message ?? "no row" };
+  return { data: numeric<InvoiceLoop>(data, []), error: null };
+}
+
+/**
+ * Of the people who have lived through their second week (week 1), the share
+ * who sent a document in it. The earliest retention figure that means
+ * anything, so the Overview can show it before a month has passed.
+ */
+export function cameBack(cohorts: Cohort[]): { pct: number | null; of: number } {
+  const ready = cohorts.filter((c) => c.weeks_complete > 1);
+  const of = ready.reduce((a, c) => a + c.users, 0);
+  const back = ready.reduce((a, c) => a + c.w1, 0);
+  return { pct: of > 0 ? (100 * back) / of : null, of };
+}

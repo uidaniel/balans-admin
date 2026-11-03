@@ -7,6 +7,7 @@ import type { IconName } from "@/components/icons";
  */
 export const NAV = [
   { href: "/", label: "Overview", icon: "overview", group: "Business" },
+  { href: "/analytics", label: "Analytics", icon: "bars", group: "Business" },
   { href: "/users", label: "Users", icon: "users", group: "Business" },
   { href: "/payments", label: "Payments", icon: "card", group: "Business" },
   { href: "/waitlist", label: "Waitlist", icon: "clock", group: "Growth" },
@@ -19,5 +20,5 @@ export const GROUPS = ["Business", "Growth", "System"] as const;
 
 export type NavHref = (typeof NAV)[number]["href"];
 
-/** The four a phone shows as tabs; the rest sit behind "More". */
-export const TABS: readonly NavHref[] = ["/", "/users", "/payments", "/waitlist"];
+/** The four a phone shows as tabs; the rest sit behind "More". The waitlist is retired now Balans is live. */
+export const TABS: readonly NavHref[] = ["/", "/analytics", "/users", "/payments"];
