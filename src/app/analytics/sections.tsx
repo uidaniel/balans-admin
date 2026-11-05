@@ -16,6 +16,7 @@ import {
 import { ColumnChart, Donut, DualBars, Funnel, Gauge, HourStrip, RankedBars } from "@/components/charts";
 import { Card, Empty, SectionTitle, Stat, statGrid, table } from "@/components/ui";
 import { Failed } from "../shell";
+import { notYet, type SetupStep } from "@/lib/test-data";
 import { Mini, Row, dayMonth, formatHours, formatMinutes, share, titleCase } from "../parts";
 
 /*
@@ -37,11 +38,13 @@ export function GrowthSection({
   weekly,
   sources,
   loop,
+  steps,
 }: {
   o: Overview;
   days: Day[];
   i: Insights | null;
   s: Loaded<Setup>;
+  steps: { data: SetupStep[] | null; error: string | null };
   onPro: number | null;
   weekly: Loaded<Week[]>;
   sources: Loaded<Sources>;
@@ -113,6 +116,7 @@ export function GrowthSection({
       <SignupSources s={sources} />
       <InvoiceLoopCard loop={loop} />
       <SetupNudges s={s} />
+      <SetupSteps steps={steps} />
     </>
   );
 }
@@ -256,6 +260,72 @@ function SignupSources({ s }: { s: Loaded<Sources> }) {
             ))}
           </ul>
         </div>
+      )}
+    </Card>
+  );
+}
+
+/*
+ * Where people stop in setup (5 November 2026; API migration 0072). Each
+ * step is written the first time somebody reaches it, by the setup form or
+ * by typing, so this counts only people who joined since then.
+ */
+const STEPS: { label: string; keys: string[] }[] = [
+  { label: "Messaged Balans", keys: ["started"] },
+  { label: "Got the setup card", keys: ["welcome"] },
+  { label: "Gave the business name", keys: ["business", "onboarding:business_name"] },
+  { label: "Gave bank or payment details", keys: ["payout", "mfb", "abroad", "onboarding:bank"] },
+  { label: "Checked the account name", keys: ["confirm", "onboarding:confirm_account"] },
+  { label: "Finished setup", keys: ["finished"] },
+];
+
+function SetupSteps({ steps }: { steps: { data: SetupStep[] | null; error: string | null } }) {
+  if (!steps.data) {
+    return (
+      <Card className="mt-4" title="Where setup stops">
+        {notYet(steps.error) ? (
+          <p className="text-sm text-ink/55">Comes with the next API release, which starts recording each step.</p>
+        ) : (
+          <Failed what="setup steps" error={steps.error ?? "unknown"} />
+        )}
+      </Card>
+    );
+  }
+  const count = new Map(steps.data.map((r) => [r.step, r.people]));
+  // A step reached by the form or by typing is the same step: the larger
+  // of the two, so one person is never counted twice.
+  const rows = STEPS.map((st) => ({ label: st.label, n: Math.max(0, ...st.keys.map((k) => count.get(k) ?? 0)) }));
+  const top = rows[0]!.n;
+  return (
+    <Card
+      className="mt-4"
+      title="Where setup stops"
+      sub="People who joined in the last 30 days, since steps were first recorded"
+    >
+      {top === 0 ? (
+        <p className="text-sm text-ink/55">Nobody new since steps started being recorded.</p>
+      ) : (
+        <ul className="space-y-3">
+          {rows.map((r, idx) => {
+            const pct = top ? Math.round((100 * r.n) / top) : 0;
+            const prev = idx > 0 ? rows[idx - 1]!.n : null;
+            const lost = prev !== null && prev > r.n ? prev - r.n : 0;
+            return (
+              <li key={r.label}>
+                <div className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="text-ink/75">{r.label}</span>
+                  <span className="tabular-nums">
+                    {r.n.toLocaleString("en-NG")} <span className="text-ink/45">· {pct}%</span>
+                    {lost > 0 && <span className="text-clay"> · {lost} stopped here</span>}
+                  </span>
+                </div>
+                <div className="mt-1.5 h-2 rounded-full bg-paper">
+                  <div className="h-2 rounded-full bg-moss" style={{ width: `${pct}%` }} />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </Card>
   );

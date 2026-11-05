@@ -6,6 +6,7 @@ import { Card, Empty, Notice, Pill, Stat, btn, field, statGrid, table, type Pill
 import { Icon } from "@/components/icons";
 import { Failed, gate, Shell } from "../../shell";
 import { revealClient } from "./actions";
+import { setTestAccount } from "../../test-data/actions";
 import { REASONS, SHOWN_FOR_MS, reasonLabel } from "./reasons";
 
 export const dynamic = "force-dynamic";
@@ -85,13 +86,13 @@ export default async function UserPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ shown?: string; reveal_error?: string }>;
+  searchParams: Promise<{ shown?: string; reveal_error?: string; test_ok?: string; test_error?: string }>;
 }) {
   const g = await gate();
   if (!g.staff) return g.stop;
   const staff = g.staff;
   const { id } = await params;
-  const { shown, reveal_error } = await searchParams;
+  const { shown, reveal_error, test_ok, test_error } = await searchParams;
 
   if (staff.role !== "admin") {
     return (
@@ -123,6 +124,10 @@ export default async function UserPage({
   if (!user) return <Missing email={staff.email} />;
 
   await logView(staff.email, user.id);
+  // Test account or not (API migration 0074). Read on its own, so the page
+  // still opens before that column is live.
+  const testFlag = await db.from("users").select("is_test").eq("id", id).maybeSingle<{ is_test: boolean }>();
+  const isTest = testFlag.error ? null : Boolean(testFlag.data?.is_test);
 
   const [account, docs, clients] = await Promise.all([
     db.from("admin_accounts").select("*").eq("id", id).maybeSingle<Account>(),
@@ -190,6 +195,29 @@ export default async function UserPage({
         Open a user&apos;s documents and clients only to help them, fix a fault, settle a dispute or keep Balans secure.
         This visit is logged, and so is every client whose details you show.
       </Notice>
+
+      {(test_ok || test_error) && (
+        <Notice tone={test_error ? "clay" : "moss"} role="status" className="mb-4">
+          {test_error ?? test_ok}
+        </Notice>
+      )}
+      {isTest !== null && (
+        <form action={setTestAccount} className="mb-4">
+          <input type="hidden" name="user" value={user.id} />
+          <input type="hidden" name="on" value={isTest ? "0" : "1"} />
+          <input type="hidden" name="back" value={`/users/${user.id}`} />
+          {isTest ? (
+            <Notice tone="marigold" title="Test account" action={<button className={btn.secondary}>Count it again</button>}>
+              Left out of every total in the admin. Its invoices and payments are still here.
+            </Notice>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-line bg-white px-4 py-3 text-sm sm:px-5">
+              <p className="text-ink/60">A test, or somebody trying Balans out? Leave it out of the numbers.</p>
+              <button className={btn.secondary}>Mark as test account</button>
+            </div>
+          )}
+        </form>
+      )}
 
       <div className={statGrid}>
         <Stat

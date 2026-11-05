@@ -28,6 +28,8 @@ import { MiniBars, weekChange } from "@/components/charts";
 import { Avatar, Card, Empty, Kpi, MoreLink, Notice, Pill, SectionTitle, Stat, btn, statGrid, table } from "@/components/ui";
 import { formatHours } from "./parts";
 import { Failed, gate, Shell } from "./shell";
+import { loadLeftOutCounts } from "@/lib/test-data";
+import { LeftOutLine } from "@/components/left-out";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +58,7 @@ export default async function OverviewPage() {
     loadCohorts(),
   ]);
   const unverified = await loadUnverifiedSubaccounts();
+  const leftOut = await loadLeftOutCounts();
   const waiting = unverified.data ?? [];
 
   /*
@@ -74,6 +77,7 @@ export default async function OverviewPage() {
       title="Overview"
       sub="How it is going, whether it is healthy, and who is using it."
     >
+      <LeftOutLine counts={leftOut} />
       {waiting.length > 0 && (
         <Notice
           tone="clay"

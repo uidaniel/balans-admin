@@ -18,6 +18,8 @@ import { Card, Empty, Segmented } from "@/components/ui";
 import { MetricsPanel, type Metrics } from "../metrics";
 import { compactNaira, dayMonth } from "../parts";
 import { Failed, gate, Shell } from "../shell";
+import { loadLeftOutCounts, loadSetupSteps } from "@/lib/test-data";
+import { LeftOutLine } from "@/components/left-out";
 import { GrowthSection, InvoicesPaid, MoneySection, RetentionSection, UsageSection, WhatsAppSection } from "./sections";
 
 export const dynamic = "force-dynamic";
@@ -57,6 +59,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     <Shell email={g.staff.email} current="/analytics" title="Analytics" sub={SUB[tab]}>
       <Segmented current={tab} items={TABS.map((t) => ({ id: t.id, label: t.label, href: `/analytics?tab=${t.id}` }))} />
       <div className="-mt-6">{await body(tab)}</div>
+      <div className="mt-6">
+        <LeftOutLine counts={await loadLeftOutCounts()} />
+      </div>
     </Shell>
   );
 }
@@ -64,7 +69,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 async function body(tab: Tab) {
   switch (tab) {
     case "growth": {
-      const [overview, daily, insights, setup, sources, weekly, loop, top] = await Promise.all([
+      const [overview, daily, insights, setup, sources, weekly, loop, top, steps] = await Promise.all([
         loadOverview(),
         loadDaily(),
         loadInsights(),
@@ -73,6 +78,7 @@ async function body(tab: Tab) {
         loadWeekly(),
         loadInvoiceLoop(),
         loadAccounts("", "invoiced"),
+        loadSetupSteps(),
       ]);
       if (!overview.data || !daily.data) return <Failed what="growth" error={overview.error ?? daily.error ?? "unknown"} />;
       const onPro = top.data ? top.data.filter((a) => a.plan === "pro").length : null;
@@ -86,6 +92,7 @@ async function body(tab: Tab) {
           weekly={weekly}
           sources={sources}
           loop={loop}
+          steps={steps}
         />
       );
     }
